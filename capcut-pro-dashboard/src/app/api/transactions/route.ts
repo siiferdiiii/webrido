@@ -80,7 +80,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { email, name, whatsapp, amount, durationDays = 30 } = body;
+    const { email, name, whatsapp, amount, productName, durationDays = 30 } = body;
 
     if (!email || !name || !whatsapp) {
       return NextResponse.json({ error: "Email, nama, dan WhatsApp wajib diisi" }, { status: 400 });
@@ -131,6 +131,7 @@ export async function POST(req: NextRequest) {
         userId: user.id,
         stockAccountId: availableAccount.id,
         amount: amount || 0,
+        productName: productName || null,
         status: "success",
         isManual: true,
         warrantyExpiredAt,

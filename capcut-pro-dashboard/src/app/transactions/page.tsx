@@ -23,6 +23,7 @@ interface Transaction {
   id: string;
   lynkIdRef: string | null;
   amount: number;
+  productName: string | null;
   status: string | null;
   isManual: boolean | null;
   purchaseDate: string | null;
@@ -78,7 +79,7 @@ export default function TransactionsPage() {
   const [showModal, setShowModal] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<{ account?: { email: string; password: string }; message?: string } | null>(null);
-  const [form, setForm] = useState({ name: "", email: "", whatsapp: "", amount: "" });
+  const [form, setForm] = useState({ name: "", email: "", whatsapp: "", amount: "", productName: "" });
 
   // Pagination
   const [page, setPage] = useState(1);
@@ -131,7 +132,7 @@ export default function TransactionsPage() {
       const res = await fetch("/api/transactions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: form.name, email: form.email, whatsapp: form.whatsapp, amount: parseFloat(form.amount) || 0 }),
+        body: JSON.stringify({ name: form.name, email: form.email, whatsapp: form.whatsapp, amount: parseFloat(form.amount) || 0, productName: form.productName || "CapCut Pro" }),
       });
       const json = await res.json();
       if (res.ok) {
@@ -146,7 +147,7 @@ export default function TransactionsPage() {
 
   function closeModal() {
     setShowModal(false);
-    setForm({ name: "", email: "", whatsapp: "", amount: "" });
+    setForm({ name: "", email: "", whatsapp: "", amount: "", productName: "" });
     setResult(null);
   }
 
@@ -262,6 +263,7 @@ export default function TransactionsPage() {
                       <th>Pelanggan</th>
                       <th>WhatsApp</th>
                       <th>Akun CapCut</th>
+                      <th>Produk</th>
                       <th>Nominal</th>
                       <th>Tanggal Beli</th>
                       <th>Garansi s/d</th>
@@ -295,6 +297,7 @@ export default function TransactionsPage() {
                           </td>
                           <td className="text-sm text-[var(--text-secondary)]">{maskPhone(trx.user?.whatsapp)}</td>
                           <td className="font-mono text-xs">{trx.stockAccount?.accountEmail || "-"}</td>
+                          <td className="text-sm font-medium text-[#c7d2fe]">{trx.productName || <span className="text-[var(--text-muted)] italic text-xs">CapCut Pro (Default)</span>}</td>
                           <td className="font-semibold">{formatCurrency(Number(trx.amount))}</td>
                           <td className="text-[var(--text-secondary)] text-sm">{formatDateTime(trx.purchaseDate)}</td>
                           <td className="text-sm">{formatDate(trx.warrantyExpiredAt)}</td>
@@ -373,6 +376,7 @@ export default function TransactionsPage() {
                   <div><label className="form-label">Nama Pelanggan</label><input type="text" className="form-input" placeholder="Nama lengkap" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></div>
                   <div><label className="form-label">Email Pelanggan</label><input type="email" className="form-input" placeholder="email@gmail.com" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></div>
                   <div><label className="form-label">Nomor WhatsApp</label><input type="text" className="form-input" placeholder="08xxxxxxxxxx" value={form.whatsapp} onChange={(e) => setForm({ ...form, whatsapp: e.target.value })} /></div>
+                  <div><label className="form-label">Nama Produk (Opsional)</label><input type="text" className="form-input" placeholder="CapCut Pro PC 1 Bulan" value={form.productName} onChange={(e) => setForm({ ...form, productName: e.target.value })} /></div>
                   <div><label className="form-label">Nominal (Rp)</label><input type="number" className="form-input" placeholder="35000" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} /></div>
                   {result?.message && <p className="text-sm text-rose-400">{result.message}</p>}
                 </>

@@ -52,6 +52,7 @@ model Transaction {
   userId               String?               @map("user_id") @db.Uuid
   stockAccountId       String?               @map("stock_account_id") @db.Uuid
   amount               Decimal               @default(0) @db.Decimal(12, 2)
+  productName          String?               @map("product_name") @db.VarChar(255)
   status               String?               @default("success") @db.VarChar(50)
   isManual             Boolean?              @default(false) @map("is_manual")
   purchaseDate         DateTime?             @default(now()) @map("purchase_date") @db.Timestamptz(6)

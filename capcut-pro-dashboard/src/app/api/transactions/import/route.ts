@@ -52,6 +52,7 @@ export async function POST(req: NextRequest) {
       amount: number;
       purchaseDate: Date;
       warrantyExpiredAt: Date;
+      productName: string | null;
     }
     const parsedRows: ParsedTrx[] = [];
 
@@ -76,6 +77,9 @@ export async function POST(req: NextRequest) {
       
       const rawAmount = trx.total || trx.sub_total || trx.price || trx.nominal || trx.harga || 0;
       const amount = Number(rawAmount) || 0;
+
+      const rawProduct = trx.produk || trx.product || trx["nama produk"] || trx.item || trx.title || trx.nama_produk;
+      const productName = typeof rawProduct === 'string' && rawProduct ? rawProduct.trim() : null;
       
       const purchasedDateStr = trx["purchased date"] || trx.purchased_date || trx.tanggal || trx.date || trx["tanggal pembelian"] || null;
 
@@ -118,7 +122,7 @@ export async function POST(req: NextRequest) {
       const warrantyExpiredAt = new Date(purchaseDate);
       warrantyExpiredAt.setDate(warrantyExpiredAt.getDate() + 30);
 
-      parsedRows.push({ lynkId, email, name, phone, amount, purchaseDate, warrantyExpiredAt });
+      parsedRows.push({ lynkId, email, name, phone, amount, purchaseDate, warrantyExpiredAt, productName });
     }
 
     // ===== STEP 2: Bulk fetch existing data =====
@@ -206,6 +210,7 @@ export async function POST(req: NextRequest) {
                 lynkIdRef: row.lynkId,
                 userId,
                 amount: row.amount,
+                productName: row.productName,
                 status: "success",
                 isManual: false,
                 purchaseDate: row.purchaseDate,

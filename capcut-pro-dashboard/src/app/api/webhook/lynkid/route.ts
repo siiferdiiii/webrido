@@ -191,6 +191,7 @@ export async function POST(req: NextRequest) {
         userId: user.id,
         stockAccountId: account.id,
         amount: price,
+        productName: productTitle,
         status: "success",
         isManual: false,
         purchaseDate,
