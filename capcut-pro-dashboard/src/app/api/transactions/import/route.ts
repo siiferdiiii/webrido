@@ -63,13 +63,13 @@ export async function POST(req: NextRequest) {
         trx[key.toLowerCase().trim()] = value;
       }
 
-      const rawId = trx.id || trx["lynkid"] || trx["lynk id"] || trx["lynk.id"] || trx["lynk.id order id"];
+      const rawId = trx.id || trx["lynkid"] || trx["lynk id"] || trx["lynk.id"] || trx["lynk.id order id"] || trx.ref || trx["ref."];
       const lynkId = rawId ? String(rawId).trim() : null;
       
       const rawEmail = trx.email || trx["buyer email"] || trx["email pembeli"];
       const email = typeof rawEmail === 'string' ? rawEmail.trim() : null;
       
-      const rawName = trx.name || trx.nama || trx.pelanggan || trx["buyer name"] || trx["nama pembeli"];
+      const rawName = trx.name || trx.nama || trx.pelanggan || trx["buyer name"] || trx["nama pembeli"] || trx["buyer name (opsional)"];
       const name = typeof rawName === 'string' ? rawName.trim() : "Tanpa Nama";
       
       const rawPhone = trx.phone || trx["no hp"] || trx.whatsapp || trx.wa || trx["buyer phone"] || String(trx["buyer phone (opsional)"] || "");
@@ -78,7 +78,7 @@ export async function POST(req: NextRequest) {
       const rawAmount = trx.total || trx.sub_total || trx.price || trx.nominal || trx.harga || 0;
       const amount = Number(rawAmount) || 0;
 
-      const rawProduct = trx.produk || trx.product || trx["nama produk"] || trx.item || trx.title || trx.nama_produk;
+      const rawProduct = trx.produk || trx.product || trx["nama produk"] || trx.item || trx.title || trx.nama_produk || trx["judul barang"];
       const productName = typeof rawProduct === 'string' && rawProduct ? rawProduct.trim() : null;
       
       const purchasedDateStr = trx["purchased date"] || trx.purchased_date || trx.tanggal || trx.date || trx["tanggal pembelian"] || null;
