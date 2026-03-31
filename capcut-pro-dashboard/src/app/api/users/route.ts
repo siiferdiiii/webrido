@@ -8,6 +8,7 @@ export async function GET(req: NextRequest) {
     const search = searchParams.get("search") || "";
     const status = searchParams.get("status") || "";
     const followUp = searchParams.get("followUp") || "";
+    const tagId = searchParams.get("tagId") || "";
     const sortBy = searchParams.get("sortBy") || "terbaru";
     const page = parseInt(searchParams.get("page") || "1");
     const limit = parseInt(searchParams.get("limit") || "20");
@@ -44,6 +45,10 @@ export async function GET(req: NextRequest) {
       where.followUpStatus = followUp;
     }
 
+    if (tagId) {
+      where.tags = { some: { tagId } };
+    }
+
     // Tentukan order by awal untuk Prisma
     let orderBy: any = { createdAt: "desc" };
 
@@ -75,6 +80,10 @@ export async function GET(req: NextRequest) {
             select: { purchaseDate: true, warrantyExpiredAt: true },
           },
           _count: { select: { transactions: true } },
+          tags: {
+            include: { tag: true },
+            orderBy: { assignedAt: "asc" },
+          },
         },
         orderBy,
         skip: (sortBy === "last_trx_desc" || sortBy === "last_trx_asc") ? undefined : skip,
