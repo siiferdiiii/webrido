@@ -21,14 +21,29 @@ export async function GET(req: NextRequest) {
     const startDateB = startBStr ? new Date(startBStr) : firstDayThisMonth;
     const endDateB = endBStr ? new Date(endBStr) : new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
 
-    // Filter transaksi sukses di Periode A
+    // Filter opsional: tagId
+    const tagId = searchParams.get("tagId") || "";
+
+    // Filter transaksi sukses di Periode A (+ filter tag jika ada)
     const transactionsA = await prisma.transaction.findMany({
       where: {
         status: "success",
         purchaseDate: { gte: startDateA, lte: endDateA },
+        ...(tagId ? { user: { tags: { some: { tagId } } } } : {}),
       },
       include: {
-        user: { select: { id: true, name: true, email: true, whatsapp: true } },
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            whatsapp: true,
+            tags: {
+              include: { tag: true },
+              orderBy: { assignedAt: "asc" },
+            },
+          },
+        },
       },
       orderBy: { purchaseDate: "asc" }
     });
@@ -43,6 +58,7 @@ export async function GET(req: NextRequest) {
           name: t.user.name,
           email: t.user.email,
           whatsapp: t.user.whatsapp,
+          tags: t.user.tags ?? [],
           periodATransactions: 0,
           periodAAmount: 0,
           periodBTransactions: 0,

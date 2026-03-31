@@ -239,7 +239,7 @@ export default function DashboardPage() {
     <>
       <Topbar title="Dashboard" subtitle="Ringkasan overview bisnis CapCut Pro" />
 
-      <div className="px-8 pb-8 space-y-6">
+      <div className="px-4 md:px-8 pb-8 space-y-6">
         {loading ? (
           <div className="flex items-center justify-center py-20">
             <Loader2 size={32} className="animate-spin text-[#818cf8]" />
@@ -248,7 +248,7 @@ export default function DashboardPage() {
         ) : (
           <>
             {/* ── Stat Cards ── */}
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-5">
+            <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
               {stats.map((stat) => (
                 <div
                   key={stat.label}
@@ -309,7 +309,7 @@ export default function DashboardPage() {
                 <>
                   {/* Summary badges */}
                   {chartData?.summary && (
-                    <div className="grid grid-cols-3 gap-4 mb-6">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
                       <div className="rounded-xl px-4 py-3" style={{ background: "rgba(99,102,241,0.08)", border: "1px solid rgba(99,102,241,0.15)" }}>
                         <div className="flex items-center gap-2 mb-1">
                           <ShoppingCart size={13} style={{ color: "#818cf8" }} />

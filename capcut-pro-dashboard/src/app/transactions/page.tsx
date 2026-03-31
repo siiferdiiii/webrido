@@ -17,6 +17,8 @@ import {
   CheckCircle,
   AlertTriangle,
   Copy,
+  LayoutList,
+  LayoutGrid,
 } from "lucide-react";
 
 interface Transaction {
@@ -85,6 +87,7 @@ export default function TransactionsPage() {
   const [page, setPage] = useState(1);
   const limit = 20;
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<'table' | 'card'>('table');
 
   function copyUUID(id: string) {
     navigator.clipboard.writeText(id);
@@ -216,7 +219,7 @@ export default function TransactionsPage() {
     <>
       <Topbar title="Transaksi" subtitle="Kelola transaksi penjualan CapCut Pro" />
 
-      <div className="px-8 pb-8 space-y-5">
+      <div className="px-4 md:px-8 pb-8 space-y-5">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="flex flex-wrap items-center gap-3 flex-1">
             <div className="search-box flex-1 max-w-xs">
@@ -249,78 +252,136 @@ export default function TransactionsPage() {
           </div>
         </div>
 
+        {/* ── View Toggle (mobile only) ── */}
+        <div className="flex items-center justify-between lg:hidden">
+          <p className="text-xs text-[var(--text-muted)]">Total {total} transaksi</p>
+          <div className="flex gap-1">
+            <button className={`view-toggle-btn ${viewMode === 'table' ? 'active' : ''}`} onClick={() => setViewMode('table')}>
+              <LayoutList size={13} /> Tabel
+            </button>
+            <button className={`view-toggle-btn ${viewMode === 'card' ? 'active' : ''}`} onClick={() => setViewMode('card')}>
+              <LayoutGrid size={13} /> Card
+            </button>
+          </div>
+        </div>
+
         <div className="glass-card overflow-hidden">
           {loading ? (
             <div className="flex items-center justify-center py-16"><Loader2 size={24} className="animate-spin text-[#818cf8]" /><span className="ml-2 text-[var(--text-secondary)]">Memuat...</span></div>
           ) : (
             <>
-              <div className="overflow-x-auto">
-                <table className="data-table">
-                  <thead>
-                    <tr>
-                      <th>UUID (Transaksi)</th>
-                      <th>Lynk.id Ref</th>
-                      <th>Pelanggan</th>
-                      <th>WhatsApp</th>
-                      <th>Akun CapCut</th>
-                      <th>Produk</th>
-                      <th>Nominal</th>
-                      <th>Tanggal Beli</th>
-                      <th>Garansi s/d</th>
-                      <th>Dibuat</th>
-                      <th>Sumber</th>
-                      <th>Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {transactions.length === 0 ? (
-                      <tr><td colSpan={11} className="text-center py-8 text-[var(--text-muted)]">Belum ada transaksi</td></tr>
-                    ) : (
-                      transactions.map((trx) => (
-                        <tr key={trx.id}>
-                          <td className="font-mono text-xs text-[#818cf8]">
-                            <div className="flex items-center gap-1.5">
-                              <span title={trx.id}>{trx.id.substring(0, 8)}...</span>
-                              <button
-                                onClick={() => copyUUID(trx.id)}
-                                title="Copy UUID"
-                                className="text-[var(--text-muted)] hover:text-white transition-colors"
-                              >
-                                {copiedId === trx.id ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />}
-                              </button>
-                            </div>
-                          </td>
-                          <td className="font-mono text-xs text-[var(--text-muted)]">{trx.lynkIdRef || <span className="text-[var(--text-muted)] opacity-40">-</span>}</td>
-                          <td>
-                            <p className="font-medium">{trx.user?.name || "-"}</p>
-                            <p className="text-xs text-[var(--text-muted)]">{maskEmail(trx.user?.email)}</p>
-                          </td>
-                          <td className="text-sm text-[var(--text-secondary)]">{maskPhone(trx.user?.whatsapp)}</td>
-                          <td className="font-mono text-xs">{trx.stockAccount?.accountEmail || "-"}</td>
-                          <td className="text-sm font-medium text-[#c7d2fe]">{trx.productName || <span className="text-[var(--text-muted)] italic text-xs">CapCut Pro (Default)</span>}</td>
-                          <td className="font-semibold">{formatCurrency(Number(trx.amount))}</td>
-                          <td className="text-[var(--text-secondary)] text-sm">{formatDateTime(trx.purchaseDate)}</td>
-                          <td className="text-sm">{formatDate(trx.warrantyExpiredAt)}</td>
-                          <td className="text-xs text-[var(--text-muted)]">{formatDateTime(trx.createdAt ?? null)}</td>
-                          <td>
-                            {trx.isManual ? <span className="badge badge-purple">Manual</span> : <span className="badge badge-info">Lynk.id</span>}
-                          </td>
-                          <td>{getStatusBadge(trx.status)}</td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-              <div className="flex items-center justify-between px-6 py-4 border-t border-[rgba(99,102,241,0.08)]">
-                <p className="text-sm text-[var(--text-muted)]">Total {total} transaksi &bull; Halaman {page} dari {totalPages}</p>
+              {/* ── Table View ── */}
+              {viewMode === 'table' && (
+                <div className="overflow-x-auto">
+                  <table className="data-table">
+                    <thead>
+                      <tr>
+                        <th>UUID (Transaksi)</th>
+                        <th>Lynk.id Ref</th>
+                        <th>Pelanggan</th>
+                        <th>WhatsApp</th>
+                        <th>Akun CapCut</th>
+                        <th>Produk</th>
+                        <th>Nominal</th>
+                        <th>Tanggal Beli</th>
+                        <th>Garansi s/d</th>
+                        <th>Dibuat</th>
+                        <th>Sumber</th>
+                        <th className="sticky-col-head">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {transactions.length === 0 ? (
+                        <tr><td colSpan={12} className="text-center py-8 text-[var(--text-muted)]">Belum ada transaksi</td></tr>
+                      ) : (
+                        transactions.map((trx) => (
+                          <tr key={trx.id}>
+                            <td className="font-mono text-xs text-[#818cf8]">
+                              <div className="flex items-center gap-1.5">
+                                <span title={trx.id}>{trx.id.substring(0, 8)}...</span>
+                                <button onClick={() => copyUUID(trx.id)} title="Copy UUID" className="text-[var(--text-muted)] hover:text-white transition-colors">
+                                  {copiedId === trx.id ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />}
+                                </button>
+                              </div>
+                            </td>
+                            <td className="font-mono text-xs text-[var(--text-muted)]">{trx.lynkIdRef || <span className="opacity-40">-</span>}</td>
+                            <td>
+                              <p className="font-medium">{trx.user?.name || "-"}</p>
+                              <p className="text-xs text-[var(--text-muted)]">{maskEmail(trx.user?.email)}</p>
+                            </td>
+                            <td className="text-sm text-[var(--text-secondary)]">{maskPhone(trx.user?.whatsapp)}</td>
+                            <td className="font-mono text-xs">{trx.stockAccount?.accountEmail || "-"}</td>
+                            <td className="text-sm font-medium text-[#c7d2fe]">{trx.productName || <span className="text-[var(--text-muted)] italic text-xs">CapCut Pro (Default)</span>}</td>
+                            <td className="font-semibold">{formatCurrency(Number(trx.amount))}</td>
+                            <td className="text-[var(--text-secondary)] text-sm">{formatDateTime(trx.purchaseDate)}</td>
+                            <td className="text-sm">{formatDate(trx.warrantyExpiredAt)}</td>
+                            <td className="text-xs text-[var(--text-muted)]">{formatDateTime(trx.createdAt ?? null)}</td>
+                            <td>{trx.isManual ? <span className="badge badge-purple">Manual</span> : <span className="badge badge-info">Lynk.id</span>}</td>
+                            <td className="sticky-col-body">{getStatusBadge(trx.status)}</td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {/* ── Card View (mobile) ── */}
+              {viewMode === 'card' && (
+                <div className="data-card-grid">
+                  {transactions.length === 0 ? (
+                    <p className="text-center py-8 text-[var(--text-muted)]">Belum ada transaksi</p>
+                  ) : (
+                    transactions.map((trx) => (
+                      <div key={trx.id} className="data-card">
+                        <div className="flex items-start justify-between mb-3">
+                          <div className="min-w-0 flex-1 mr-2">
+                            <p className="font-semibold text-white text-sm truncate">{trx.user?.name || "-"}</p>
+                            <p className="text-xs text-[var(--text-muted)] truncate">{maskEmail(trx.user?.email)}</p>
+                          </div>
+                          {getStatusBadge(trx.status)}
+                        </div>
+                        <div className="space-y-1.5 pt-2.5 border-t border-[rgba(99,102,241,0.08)]">
+                          <div className="data-card-row">
+                            <span className="data-card-label">Nominal</span>
+                            <span className="data-card-value font-semibold text-white">{formatCurrency(Number(trx.amount))}</span>
+                          </div>
+                          <div className="data-card-row">
+                            <span className="data-card-label">Produk</span>
+                            <span className="data-card-value text-[#c7d2fe]">{trx.productName || "CapCut Pro"}</span>
+                          </div>
+                          <div className="data-card-row">
+                            <span className="data-card-label">Akun</span>
+                            <span className="data-card-value font-mono text-xs">{trx.stockAccount?.accountEmail || "-"}</span>
+                          </div>
+                          <div className="data-card-row">
+                            <span className="data-card-label">Tanggal Beli</span>
+                            <span className="data-card-value">{formatDate(trx.purchaseDate)}</span>
+                          </div>
+                          <div className="data-card-row">
+                            <span className="data-card-label">Garansi s/d</span>
+                            <span className="data-card-value">{formatDate(trx.warrantyExpiredAt)}</span>
+                          </div>
+                          <div className="data-card-row">
+                            <span className="data-card-label">Sumber</span>
+                            <span className="data-card-value">{trx.isManual ? <span className="badge badge-purple">Manual</span> : <span className="badge badge-info">Lynk.id</span>}</span>
+                          </div>
+                          <div className="data-card-row">
+                            <span className="data-card-label">WA</span>
+                            <span className="data-card-value">{maskPhone(trx.user?.whatsapp)}</span>
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              )}
+
+              {/* ── Pagination ── */}
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between px-4 md:px-6 py-4 border-t border-[rgba(99,102,241,0.08)] gap-3">
+                <p className="text-sm text-[var(--text-muted)]">Total {total} transaksi &bull; Hal. {page}/{totalPages}</p>
                 <div className="flex items-center gap-2">
-                  <button
-                    className="btn-secondary text-xs px-3 py-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
-                    onClick={() => setPage(p => Math.max(1, p - 1))}
-                    disabled={page <= 1 || loading}
-                  >← Prev</button>
-                  {/* Page numbers */}
+                  <button className="btn-secondary text-xs px-3 py-1.5 disabled:opacity-40 disabled:cursor-not-allowed" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page <= 1 || loading}>← Prev</button>
                   <div className="flex items-center gap-1">
                     {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
                       let pageNum: number;
@@ -329,23 +390,11 @@ export default function TransactionsPage() {
                       else if (page >= totalPages - 2) pageNum = totalPages - 4 + i;
                       else pageNum = page - 2 + i;
                       return (
-                        <button
-                          key={pageNum}
-                          onClick={() => setPage(pageNum)}
-                          className={`w-7 h-7 rounded-lg text-xs font-medium ${
-                            pageNum === page
-                              ? 'bg-[rgba(99,102,241,0.3)] text-white border border-[rgba(99,102,241,0.5)]'
-                              : 'text-[var(--text-muted)] hover:bg-[rgba(99,102,241,0.1)] hover:text-white'
-                          }`}
-                        >{pageNum}</button>
+                        <button key={pageNum} onClick={() => setPage(pageNum)} className={`w-7 h-7 rounded-lg text-xs font-medium ${pageNum === page ? 'bg-[rgba(99,102,241,0.3)] text-white border border-[rgba(99,102,241,0.5)]' : 'text-[var(--text-muted)] hover:bg-[rgba(99,102,241,0.1)] hover:text-white'}`}>{pageNum}</button>
                       );
                     })}
                   </div>
-                  <button
-                    className="btn-secondary text-xs px-3 py-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
-                    onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-                    disabled={page >= totalPages || loading}
-                  >Next →</button>
+                  <button className="btn-secondary text-xs px-3 py-1.5 disabled:opacity-40 disabled:cursor-not-allowed" onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page >= totalPages || loading}>Next →</button>
                 </div>
               </div>
             </>

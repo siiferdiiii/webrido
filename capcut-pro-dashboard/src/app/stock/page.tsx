@@ -12,6 +12,8 @@ import {
   Loader2,
   Smartphone,
   Monitor,
+  LayoutList,
+  LayoutGrid,
 } from "lucide-react";
 
 interface StockItem {
@@ -61,6 +63,7 @@ export default function StockPage() {
   const [bulkMaxSlots, setBulkMaxSlots] = useState(3);
   const [submitting, setSubmitting] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<'table' | 'card'>('table');
 
   const fetchData = useCallback(() => {
     setLoading(true);
@@ -137,9 +140,9 @@ export default function StockPage() {
     <>
       <Topbar title="Stok Akun" subtitle="Kelola stok akun CapCut Pro (Sharing Account)" />
 
-      <div className="px-8 pb-8 space-y-5">
+      <div className="px-4 md:px-8 pb-8 space-y-5">
         {/* Mini Stats */}
-        <div className="grid grid-cols-4 gap-4 max-w-2xl">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 max-w-2xl">
           <div className="glass-card p-4 text-center">
             <p className="text-2xl font-bold text-emerald-400">{sc.available || 0}</p>
             <p className="text-xs text-[var(--text-muted)] mt-1">Tersedia</p>
@@ -179,6 +182,15 @@ export default function StockPage() {
           </div>
         </div>
 
+        {/* View Toggle mobile */}
+        <div className="flex items-center justify-between lg:hidden">
+          <p className="text-xs text-[var(--text-muted)]">Total {data?.total||0} akun</p>
+          <div className="flex gap-1">
+            <button className={`view-toggle-btn ${viewMode==='table'?'active':''}`} onClick={()=>setViewMode('table')}><LayoutList size={13}/> Tabel</button>
+            <button className={`view-toggle-btn ${viewMode==='card'?'active':''}`} onClick={()=>setViewMode('card')}><LayoutGrid size={13}/> Card</button>
+          </div>
+        </div>
+
         {/* Table */}
         <div className="glass-card overflow-hidden">
           {loading ? (
@@ -188,77 +200,97 @@ export default function StockPage() {
             </div>
           ) : (
             <>
-              <div className="overflow-x-auto">
-                <table className="data-table">
-                  <thead>
-                    <tr>
-                      <th>Tipe</th>
-                      <th>Email Akun</th>
-                      <th>Password</th>
-                      <th>Slot</th>
-                      <th>Status</th>
-                      <th>Durasi</th>
-                      <th>Pengguna</th>
-                      <th>Ditambahkan</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {accounts.length === 0 ? (
-                      <tr><td colSpan={8} className="text-center py-8 text-[var(--text-muted)]">Belum ada stok akun</td></tr>
-                    ) : (
-                      accounts.map((item) => (
+              {viewMode==='table' && (
+                <div className="overflow-x-auto">
+                  <table className="data-table">
+                    <thead>
+                      <tr>
+                        <th>Tipe</th>
+                        <th>Email Akun</th>
+                        <th>Password</th>
+                        <th>Slot</th>
+                        <th>Durasi</th>
+                        <th>Pengguna</th>
+                        <th>Ditambahkan</th>
+                        <th className="sticky-col-head">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {accounts.length===0 ? (
+                        <tr><td colSpan={8} className="text-center py-8 text-[var(--text-muted)]">Belum ada stok akun</td></tr>
+                      ) : accounts.map((item)=>(
                         <tr key={item.id}>
-                          <td>
-                            <span className="flex items-center gap-1.5 text-xs font-medium">
-                              {item.productType === "desktop" ? (
-                                <><Monitor size={14} className="text-blue-400" /> Desktop</>
-                              ) : (
-                                <><Smartphone size={14} className="text-green-400" /> Mobile</>
-                              )}
-                            </span>
-                          </td>
+                          <td><span className="flex items-center gap-1.5 text-xs font-medium">{item.productType==="desktop"?(<><Monitor size={14} className="text-blue-400"/>Desktop</>):(<><Smartphone size={14} className="text-green-400"/>Mobile</>)}</span></td>
                           <td className="font-mono text-sm">{item.accountEmail}</td>
                           <td>
                             <div className="flex items-center gap-2">
                               <span className="font-mono text-sm text-[var(--text-secondary)]">••••••••</span>
-                              <button className="btn-icon" style={{ width: 28, height: 28 }} title="Copy Password" onClick={() => copyPassword(item.id, item.accountPassword)}>
-                                {copiedId === item.id ? <Check size={13} className="text-emerald-400" /> : <Copy size={13} />}
+                              <button className="btn-icon" style={{width:28,height:28}} title="Copy Password" onClick={()=>copyPassword(item.id,item.accountPassword)}>
+                                {copiedId===item.id?<Check size={13} className="text-emerald-400"/>:<Copy size={13}/>}
                               </button>
                             </div>
                           </td>
                           <td>
                             <div className="flex items-center gap-1.5">
                               <div className="w-12 h-1.5 bg-[rgba(255,255,255,0.1)] rounded-full overflow-hidden">
-                                <div className="h-full rounded-full transition-all" style={{
-                                  width: `${(item.usedSlots || 0) / (item.maxSlots || 3) * 100}%`,
-                                  background: (item.usedSlots || 0) >= (item.maxSlots || 3) ? "#ef4444" : "#22c55e",
-                                }} />
+                                <div className="h-full rounded-full transition-all" style={{width:`${(item.usedSlots||0)/(item.maxSlots||3)*100}%`,background:(item.usedSlots||0)>=(item.maxSlots||3)?"#ef4444":"#22c55e"}}/>
                               </div>
-                              <span className="text-xs font-medium text-[var(--text-secondary)]">{item.usedSlots || 0}/{item.maxSlots || 3}</span>
+                              <span className="text-xs font-medium text-[var(--text-secondary)]">{item.usedSlots||0}/{item.maxSlots||3}</span>
                             </div>
                           </td>
-                          <td>{getStockBadge(item.status)}</td>
-                          <td className="text-sm">{item.durationDays || 30} Hari</td>
-                          <td>
-                            {item.transactions?.length > 0 ? (
-                              <div className="space-y-0.5">
-                                {item.transactions.slice(0, 3).map((t, i) => (
-                                  t.user?.name ? <p key={i} className="text-xs font-medium text-[#818cf8]">{t.user.name}</p> : null
-                                ))}
-                              </div>
-                            ) : (
-                              <span className="text-sm text-[var(--text-muted)]">—</span>
-                            )}
-                          </td>
-                          <td className="text-[var(--text-secondary)] text-sm">{item.createdAt ? new Date(item.createdAt).toLocaleDateString("id-ID") : "-"}</td>
+                          <td className="text-sm">{item.durationDays||30} Hari</td>
+                          <td>{item.transactions?.length>0?(<div className="space-y-0.5">{item.transactions.slice(0,3).map((t,i)=>t.user?.name?<p key={i} className="text-xs font-medium text-[#818cf8]">{t.user.name}</p>:null)}</div>):(<span className="text-sm text-[var(--text-muted)]">—</span>)}</td>
+                          <td className="text-[var(--text-secondary)] text-sm">{item.createdAt?new Date(item.createdAt).toLocaleDateString("id-ID"):"-"}</td>
+                          <td className="sticky-col-body">{getStockBadge(item.status)}</td>
                         </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-              <div className="flex items-center justify-between px-6 py-4 border-t border-[rgba(99,102,241,0.08)]">
-                <p className="text-sm text-[var(--text-muted)]">Total {data?.total || 0} akun</p>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+              {viewMode==='card' && (
+                <div className="data-card-grid">
+                  {accounts.length===0?<p className="text-center py-8 text-[var(--text-muted)]">Belum ada stok akun</p>:accounts.map((item)=>(
+                    <div key={item.id} className="data-card">
+                      <div className="flex items-start justify-between mb-3">
+                        <div className="min-w-0 flex-1 mr-2">
+                          <p className="font-mono text-sm text-white truncate">{item.accountEmail}</p>
+                          <span className="flex items-center gap-1 text-xs font-medium mt-1 text-[var(--text-muted)]">
+                            {item.productType==="desktop"?<><Monitor size={12} className="text-blue-400"/>Desktop</>:<><Smartphone size={12} className="text-green-400"/>Mobile</>}
+                          </span>
+                        </div>
+                        {getStockBadge(item.status)}
+                      </div>
+                      <div className="space-y-1.5 pt-2.5 border-t border-[rgba(99,102,241,0.08)]">
+                        <div className="data-card-row">
+                          <span className="data-card-label">Slot</span>
+                          <div className="flex items-center gap-2">
+                            <div className="w-16 h-1.5 bg-[rgba(255,255,255,0.1)] rounded-full overflow-hidden">
+                              <div className="h-full rounded-full" style={{width:`${(item.usedSlots||0)/(item.maxSlots||3)*100}%`,background:(item.usedSlots||0)>=(item.maxSlots||3)?"#ef4444":"#22c55e"}}/>
+                            </div>
+                            <span className="text-xs text-[var(--text-secondary)]">{item.usedSlots||0}/{item.maxSlots||3}</span>
+                          </div>
+                        </div>
+                        <div className="data-card-row"><span className="data-card-label">Durasi</span><span className="data-card-value">{item.durationDays||30} Hari</span></div>
+                        <div className="data-card-row">
+                          <span className="data-card-label">Password</span>
+                          <span className="data-card-value flex items-center gap-1.5">••••••••
+                            <button className="btn-icon" style={{width:22,height:22}} onClick={()=>copyPassword(item.id,item.accountPassword)}>
+                              {copiedId===item.id?<Check size={10} className="text-emerald-400"/>:<Copy size={10}/>}
+                            </button>
+                          </span>
+                        </div>
+                        {item.transactions?.length>0&&(
+                          <div className="data-card-row"><span className="data-card-label">Pengguna</span><span className="data-card-value text-[#818cf8]">{item.transactions.slice(0,2).map(t=>t.user?.name).filter(Boolean).join(", ")}</span></div>
+                        )}
+                        <div className="data-card-row"><span className="data-card-label">Ditambahkan</span><span className="data-card-value">{item.createdAt?new Date(item.createdAt).toLocaleDateString("id-ID"):"-"}</span></div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div className="px-4 md:px-6 py-4 border-t border-[rgba(99,102,241,0.08)]">
+                <p className="text-sm text-[var(--text-muted)]">Total {data?.total||0} akun</p>
               </div>
             </>
           )}

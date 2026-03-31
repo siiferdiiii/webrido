@@ -20,6 +20,8 @@ import {
   Trash2,
   TagIcon,
   Check,
+  LayoutList,
+  LayoutGrid,
 } from "lucide-react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -115,6 +117,7 @@ export default function UsersPage() {
   const [selectedUser, setSelectedUser] = useState<UserItem | null>(null);
   const [userTransactions, setUserTransactions] = useState<TransactionHistory[]>([]);
   const [loadingTransactions, setLoadingTransactions] = useState(false);
+  const [viewMode, setViewMode] = useState<'table' | 'card'>('table');
 
   const formatCurrency = (amount: number) =>
     new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", minimumFractionDigits: 0 }).format(amount);
@@ -302,7 +305,7 @@ export default function UsersPage() {
     <>
       <Topbar title="Pelanggan" subtitle="Kelola data pelanggan dan sistem retensi follow-up" />
 
-      <div className="px-8 pb-8 space-y-5">
+      <div className="px-4 md:px-8 pb-8 space-y-5">
         {/* ── Toolbar ── */}
         <div className="flex flex-col md:flex-row items-start gap-3">
           <div className="search-box flex-1 w-full md:max-w-md">
@@ -376,6 +379,15 @@ export default function UsersPage() {
           ))}
         </div>
 
+        {/* View Toggle mobile */}
+        <div className="flex items-center justify-between lg:hidden">
+          <p className="text-xs text-[var(--text-muted)]">Total {total} pelanggan</p>
+          <div className="flex gap-1">
+            <button className={`view-toggle-btn ${viewMode==='table'?'active':''}`} onClick={()=>setViewMode('table')}><LayoutList size={13}/> Tabel</button>
+            <button className={`view-toggle-btn ${viewMode==='card'?'active':''}`} onClick={()=>setViewMode('card')}><LayoutGrid size={13}/> Card</button>
+          </div>
+        </div>
+
         {/* ── Table ── */}
         <div className="glass-card overflow-hidden">
           {loading ? (
@@ -401,27 +413,24 @@ export default function UsersPage() {
                 </div>
               )}
 
+              {viewMode === 'table' && (
               <div className="overflow-x-auto">
                 <table className="data-table">
                   <thead>
                     <tr>
                       <th style={{ width: 44, paddingLeft: 20 }}>
-                        <button
-                          onClick={toggleSelectAll}
-                          className="flex items-center justify-center text-[var(--text-muted)] hover:text-[#818cf8] transition-colors"
-                          title={allVisibleSelected ? "Batalkan semua" : "Pilih semua yang tampil"}
-                        >
+                        <button onClick={toggleSelectAll} className="flex items-center justify-center text-[var(--text-muted)] hover:text-[#818cf8] transition-colors" title={allVisibleSelected ? "Batalkan semua" : "Pilih semua yang tampil"}>
                           {allVisibleSelected ? <CheckSquare size={16} className="text-[#818cf8]" /> : <Square size={16} />}
                         </button>
                       </th>
                       <th>Pelanggan</th>
                       <th>WhatsApp</th>
                       <th>Tipe</th>
-                      <th>Status</th>
                       <th>Tag</th>
                       <th>Total TRX</th>
                       <th>Pembelian Terakhir</th>
-                      <th>Aksi</th>
+                      <th>Status</th>
+                      <th className="sticky-col-head">Aksi</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -495,7 +504,7 @@ export default function UsersPage() {
                             </td>
 
                             {/* Aksi */}
-                            <td>
+                            <td className="sticky-col-body">
                               <div className="flex items-center gap-1">
                                 <button className="btn-icon" style={{ width: 32, height: 32 }} title="Lihat Detail Transaksi" onClick={() => openUserTransactions(user)}>
                                   <Eye size={15} />
@@ -598,7 +607,56 @@ export default function UsersPage() {
                   </tbody>
                 </table>
               </div>
-              <div className="flex items-center justify-between px-6 py-4 border-t border-[rgba(99,102,241,0.08)]">
+              )}
+
+              {/* ── Card View (mobile) ── */}
+              {viewMode === 'card' && (
+                <div className="data-card-grid">
+                  {users.length === 0 ? (
+                    <p className="text-center py-8 text-[var(--text-muted)]">Belum ada pelanggan</p>
+                  ) : users.map((user) => {
+                    const isSelected = selectAllDB || selectedIds.has(user.id);
+                    return (
+                      <div key={user.id} className="data-card" style={isSelected ? { borderColor: 'rgba(99,102,241,0.5)', background: 'rgba(99,102,241,0.06)' } : undefined}>
+                        <div className="flex items-start justify-between mb-3">
+                          <div className="flex items-center gap-2 min-w-0 flex-1 mr-2">
+                            <button onClick={() => { if (!selectAllDB) toggleOne(user.id); }} className={`flex-shrink-0 text-[var(--text-muted)] ${selectAllDB ? 'opacity-50 cursor-not-allowed' : 'hover:text-[#818cf8]'}`}>
+                              {isSelected ? <CheckSquare size={15} className="text-[#818cf8]" /> : <Square size={15} />}
+                            </button>
+                            <div className="min-w-0">
+                              <p className="font-semibold text-white text-sm truncate">{user.name}</p>
+                              <p className="text-xs text-[var(--text-muted)] truncate">{maskEmail(user.email)}</p>
+                            </div>
+                          </div>
+                          {user.subscriptionStatus === 'active' ? <span className="badge badge-success">Aktif</span> : <span className="badge badge-danger">Tidak Aktif</span>}
+                        </div>
+                        {user.tags && user.tags.length > 0 && (
+                          <div className="flex flex-wrap gap-1 mb-3">
+                            {user.tags.slice(0, 3).map(ct => (
+                              <span key={ct.tag.id} className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full" style={{ background: `${ct.tag.color}22`, color: ct.tag.color, border: `1px solid ${ct.tag.color}44` }}>{ct.tag.name}</span>
+                            ))}
+                            {user.tags.length > 3 && <span className="text-[10px] text-[var(--text-muted)]">+{user.tags.length - 3}</span>}
+                          </div>
+                        )}
+                        <div className="space-y-1.5 pt-2.5 border-t border-[rgba(99,102,241,0.08)]">
+                          <div className="data-card-row"><span className="data-card-label">WhatsApp</span><span className="data-card-value">{maskPhone(user.whatsapp)}</span></div>
+                          <div className="data-card-row"><span className="data-card-label">Tipe</span><span className="data-card-value">{getTypeBadge(user.customerType)}</span></div>
+                          <div className="data-card-row"><span className="data-card-label">Total TRX</span><span className="data-card-value font-semibold">{user._count.transactions}</span></div>
+                          <div className="data-card-row"><span className="data-card-label">Pembelian Terakhir</span><span className="data-card-value">{user.transactions[0] ? formatDate(user.transactions[0].purchaseDate) : '-'}</span></div>
+                        </div>
+                        <div className="flex items-center gap-2 mt-3 pt-2.5 border-t border-[rgba(99,102,241,0.08)]">
+                          <button className="btn-icon" style={{ width: 30, height: 30 }} title="Lihat Detail" onClick={() => openUserTransactions(user)}><Eye size={14} /></button>
+                          {user.whatsapp && (
+                            <a href={`https://wa.me/${user.whatsapp.replace(/^0/, '62').replace(/\D/g, '')}`} target="_blank" rel="noopener noreferrer" className="btn-icon" style={{ width: 30, height: 30, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#25d366' }} title="WhatsApp"><MessageCircle size={14} /></a>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              <div className="flex items-center justify-between px-4 md:px-6 py-4 border-t border-[rgba(99,102,241,0.08)]">
                 <p className="text-sm text-[var(--text-muted)]">Total {total} pelanggan</p>
               </div>
             </>

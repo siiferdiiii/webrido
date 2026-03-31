@@ -14,7 +14,20 @@ import {
   XCircle,
   MessageCircle,
   Download,
+  Tag,
 } from "lucide-react";
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+interface TagItem {
+  id: string;
+  name: string;
+  color: string;
+}
+
+interface CustomerTagItem {
+  tag: TagItem;
+}
 
 interface CustomerRetention {
   id: string;
@@ -26,6 +39,7 @@ interface CustomerRetention {
   periodAAmount: number;
   periodBTransactions: number;
   periodBAmount: number;
+  tags?: CustomerTagItem[];
 }
 
 interface RetentionData {
@@ -34,12 +48,18 @@ interface RetentionData {
   customers: CustomerRetention[];
 }
 
+// ─── Component ────────────────────────────────────────────────────────────────
+
 export default function RetentionPage() {
   const { maskPhone, maskEmail } = usePrivacy();
   const [data, setData] = useState<RetentionData | null>(null);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState("");
   const [search, setSearch] = useState("");
+
+  // Tag state
+  const [allTags, setAllTags] = useState<TagItem[]>([]);
+  const [activeTagId, setActiveTagId] = useState<string | null>(null);
 
   // Default filter dates
   const td = new Date();
@@ -54,6 +74,17 @@ export default function RetentionPage() {
   const [startB, setStartB] = useState(firstDayThisMonth);
   const [endB, setEndB] = useState(todayStr);
 
+  // ─── Fetch Tags ──────────────────────────────────────────────────────────────
+
+  useEffect(() => {
+    fetch("/api/tags")
+      .then((r) => r.json())
+      .then((j) => setAllTags(j.tags || []))
+      .catch(console.error);
+  }, []);
+
+  // ─── Fetch Retention Data ─────────────────────────────────────────────────
+
   const fetchRetention = useCallback(async () => {
     setLoading(true);
     const params = new URLSearchParams();
@@ -61,18 +92,20 @@ export default function RetentionPage() {
     if (endA) params.set("endA", `${endA}T23:59:59`);
     if (startB) params.set("startB", `${startB}T00:00:00`);
     if (endB) params.set("endB", `${endB}T23:59:59`);
-    
+    if (activeTagId) params.set("tagId", activeTagId);
+
     try {
       const res = await fetch(`/api/analytics/retention?${params}`);
       const json = await res.json();
       if (json.success) setData(json);
     } catch (e) { console.error(e); }
     setLoading(false);
-  }, [startA, endA, startB, endB]);
+  }, [startA, endA, startB, endB, activeTagId]);
 
   useEffect(() => { fetchRetention(); }, [fetchRetention]);
 
-  // Buka chat WA format follow up repeat order
+  // ─── WA Follow Up ────────────────────────────────────────────────────────────
+
   const followUpWA = (cust: CustomerRetention) => {
     if (!cust.whatsapp) return;
     const phone = cust.whatsapp.replace(/^0/, "62").replace(/\D/g, "");
@@ -80,15 +113,30 @@ export default function RetentionPage() {
     window.open(`https://wa.me/${phone}?text=${encodeURIComponent(text)}`, "_blank");
   };
 
-  const formatRp = (num: number) => new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(num);
+  const formatRp = (num: number) =>
+    new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(num);
+
+  // ─── Filter Lokal ─────────────────────────────────────────────────────────────
+
+  const filteredCustomers = data?.customers.filter(c => {
+    if (statusFilter && c.status !== statusFilter) return false;
+    if (search) {
+      const q = search.toLowerCase();
+      return (c.name?.toLowerCase().includes(q) || c.email?.toLowerCase().includes(q) || c.whatsapp?.toLowerCase().includes(q));
+    }
+    return true;
+  }) || [];
+
+  // ─── Export CSV ───────────────────────────────────────────────────────────────
 
   const handleExportCSV = () => {
     if (!filteredCustomers.length) return;
-    const headers = ["Nama", "Email", "WhatsApp", "Status", "Order Periode A", "Nominal Periode A", "Order Periode B", "Nominal Periode B"];
+    const headers = ["Nama", "Email", "WhatsApp", "Label", "Status", "Order Periode A", "Nominal Periode A", "Order Periode B", "Nominal Periode B"];
     const rows = filteredCustomers.map(c => [
       c.name,
       c.email,
       c.whatsapp || "-",
+      c.tags?.map(ct => ct.tag.name).join(", ") || "-",
       c.status === "retained" ? "Repeat" : "Belum Repeat",
       c.periodATransactions,
       c.periodAAmount,
@@ -107,21 +155,16 @@ export default function RetentionPage() {
     URL.revokeObjectURL(url);
   };
 
-  const filteredCustomers = data?.customers.filter(c => {
-    if (statusFilter && c.status !== statusFilter) return false;
-    if (search) {
-      const q = search.toLowerCase();
-      return (c.name?.toLowerCase().includes(q) || c.email?.toLowerCase().includes(q) || c.whatsapp?.toLowerCase().includes(q));
-    }
-    return true;
-  }) || [];
+  // ─── Active tag name ──────────────────────────────────────────────────────────
+
+  const activeTag = allTags.find(t => t.id === activeTagId) ?? null;
 
   return (
     <div>
       <Topbar title="Analisis Retensi" subtitle="Lacak pelanggan yang repeat order (perpanjang) antar dua periode." />
 
       <div className="px-8 pb-8 space-y-5">
-        
+
         {/* Date Filter Section */}
         <div className="glass-card p-4 flex flex-wrap lg:flex-nowrap items-end gap-6">
           <div className="flex-1 space-y-2">
@@ -133,9 +176,9 @@ export default function RetentionPage() {
             </div>
             <p className="text-[10px] text-[var(--text-muted)]">Pelanggan yang beli di periode ini...</p>
           </div>
-          
+
           <div className="hidden lg:flex flex-col items-center justify-center text-[var(--text-muted)] mx-2 pb-5"><RefreshCw size={20} /></div>
-          
+
           <div className="flex-1 space-y-2">
             <h4 className="text-sm font-semibold text-white flex items-center gap-1.5"><CalendarDays size={14} className="text-green-400" /> Periode B (Sekarang)</h4>
             <div className="flex items-center gap-2">
@@ -145,7 +188,7 @@ export default function RetentionPage() {
             </div>
             <p className="text-[10px] text-[var(--text-muted)]">...apakah mereka beli lagi di periode ini?</p>
           </div>
-          
+
           <button onClick={fetchRetention} className="btn-primary" style={{ height: 34 }}>
             Terapkan Filter
           </button>
@@ -159,6 +202,9 @@ export default function RetentionPage() {
               <Users size={16} className="text-[var(--text-secondary)]" />
             </div>
             <p className="text-2xl font-bold text-white">{data?.summary.totalPeriodA || 0}</p>
+            {activeTag && (
+              <p className="text-[10px] mt-1" style={{ color: activeTag.color }}>Label: {activeTag.name}</p>
+            )}
           </div>
           <div className="glass-card p-4">
             <div className="flex items-center justify-between mb-2">
@@ -180,11 +226,47 @@ export default function RetentionPage() {
               <TrendingDown size={16} className="text-cyan-400" />
             </div>
             <p className="text-2xl font-bold text-cyan-400">{data?.summary.retentionRate || 0}%</p>
-            {/* Progress bar background visual */}
             <div className="absolute bottom-0 left-0 h-1 bg-cyan-400/20 w-full" />
             <div className="absolute bottom-0 left-0 h-1 bg-cyan-400 transition-all duration-1000" style={{ width: `${data?.summary.retentionRate || 0}%` }} />
           </div>
         </div>
+
+        {/* ── Filter Label / Tag ────────────────────────────────────────────── */}
+        {allTags.length > 0 && (
+          <div className="glass-card px-4 py-3 flex items-center gap-3 flex-wrap">
+            <div className="flex items-center gap-1.5 text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider flex-shrink-0">
+              <Tag size={13} />
+              Filter Label
+            </div>
+            <div className="w-px h-4 bg-[var(--border-color)] flex-shrink-0" />
+            <div className="filter-pills flex-wrap gap-y-2">
+              <button
+                className={`filter-pill ${!activeTagId ? "active" : ""}`}
+                onClick={() => setActiveTagId(null)}
+              >
+                Semua Label
+              </button>
+              {allTags.map((tag) => (
+                <button
+                  key={tag.id}
+                  onClick={() => setActiveTagId(activeTagId === tag.id ? null : tag.id)}
+                  style={{
+                    borderColor: activeTagId === tag.id ? tag.color : undefined,
+                    background: activeTagId === tag.id ? `${tag.color}22` : undefined,
+                    color: activeTagId === tag.id ? tag.color : undefined,
+                  }}
+                  className="filter-pill flex items-center gap-1.5"
+                >
+                  <span
+                    className="inline-block w-2 h-2 rounded-full flex-shrink-0"
+                    style={{ background: tag.color }}
+                  />
+                  {tag.name}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Actions */}
         <div className="flex flex-wrap items-center justify-between gap-4">
@@ -227,6 +309,7 @@ export default function RetentionPage() {
                 <thead>
                   <tr>
                     <th>Pelanggan</th>
+                    {allTags.length > 0 && <th>Label</th>}
                     <th className="text-center">Order Per. A</th>
                     <th className="text-center">Order Per. B</th>
                     <th>Status</th>
@@ -240,6 +323,35 @@ export default function RetentionPage() {
                         <p className="text-sm font-medium text-white">{c.name}</p>
                         <p className="text-xs text-[var(--text-muted)] font-mono">{maskPhone(c.whatsapp) || maskEmail(c.email)}</p>
                       </td>
+
+                      {/* Tag badges — hanya tampil jika ada tag di sistem */}
+                      {allTags.length > 0 && (
+                        <td>
+                          <div className="flex items-center gap-1 flex-wrap" style={{ minWidth: 90 }}>
+                            {!c.tags || c.tags.length === 0 ? (
+                              <span className="text-xs text-[var(--text-muted)]">—</span>
+                            ) : (
+                              c.tags.slice(0, 2).map((ct) => (
+                                <span
+                                  key={ct.tag.id}
+                                  className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full"
+                                  style={{
+                                    background: `${ct.tag.color}22`,
+                                    color: ct.tag.color,
+                                    border: `1px solid ${ct.tag.color}44`,
+                                  }}
+                                >
+                                  {ct.tag.name}
+                                </span>
+                              ))
+                            )}
+                            {(c.tags?.length || 0) > 2 && (
+                              <span className="text-[11px] text-[var(--text-muted)]">+{c.tags!.length - 2}</span>
+                            )}
+                          </div>
+                        </td>
+                      )}
+
                       <td className="text-center">
                         <span className="text-sm font-semibold">{c.periodATransactions}x</span>
                         <p className="text-[10px] text-[var(--text-muted)]">{formatRp(c.periodAAmount)}</p>
@@ -274,6 +386,14 @@ export default function RetentionPage() {
               </table>
               <div className="px-6 py-4 border-t border-[var(--border-color)] text-xs text-[var(--text-muted)]">
                 Menampilkan {filteredCustomers.length} dari {data?.customers.length || 0} pelanggan
+                {activeTag && (
+                  <span
+                    className="ml-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium"
+                    style={{ background: `${activeTag.color}22`, color: activeTag.color, border: `1px solid ${activeTag.color}44` }}
+                  >
+                    <Tag size={10} /> {activeTag.name}
+                  </span>
+                )}
               </div>
             </div>
           )}

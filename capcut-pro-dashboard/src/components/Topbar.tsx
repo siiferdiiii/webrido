@@ -1,8 +1,9 @@
 "use client";
 
 import { ReactNode } from "react";
-import { Bell, Search, Eye, EyeOff } from "lucide-react";
+import { Bell, Search, Eye, EyeOff, Menu } from "lucide-react";
 import { usePrivacy } from "@/context/PrivacyContext";
+import { useMobileNav } from "@/context/MobileNavContext";
 
 interface TopbarProps {
   title: string;
@@ -12,31 +13,41 @@ interface TopbarProps {
 
 export default function Topbar({ title, subtitle, children }: TopbarProps) {
   const { isPrivate, toggle } = usePrivacy();
+  const { open } = useMobileNav();
 
   return (
-    <header className="flex items-center justify-between px-8 py-5">
-      <div className="flex items-center gap-4">
-        <div>
-          <h2 className="text-xl font-bold text-white">{title}</h2>
+    <header className="flex items-center justify-between px-4 md:px-8 py-4 md:py-5 gap-3">
+      <div className="flex items-center gap-3 min-w-0">
+        {/* Hamburger — mobile only */}
+        <button
+          onClick={open}
+          className="lg:hidden btn-icon flex-shrink-0"
+          aria-label="Buka menu"
+        >
+          <Menu size={18} />
+        </button>
+
+        <div className="min-w-0">
+          <h2 className="text-base md:text-xl font-bold text-white leading-tight truncate">{title}</h2>
           {subtitle && (
-            <p className="text-sm text-[var(--text-secondary)] mt-0.5">{subtitle}</p>
+            <p className="text-xs md:text-sm text-[var(--text-secondary)] mt-0.5 hidden sm:block">{subtitle}</p>
           )}
         </div>
         {children && (
-          <div className="flex items-center gap-2 ml-2">
+          <div className="flex items-center gap-2 ml-1 flex-shrink-0">
             {children}
           </div>
         )}
       </div>
 
-      <div className="flex items-center gap-3">
-        {/* Search */}
+      <div className="flex items-center gap-2 flex-shrink-0">
+        {/* Search — md+ only */}
         <div className="search-box hidden md:block">
           <Search size={16} className="search-icon" />
           <input
             type="text"
             placeholder="Cari cepat..."
-            className="form-input w-[220px] !pl-10 !py-2 text-sm"
+            className="form-input w-[200px] !pl-10 !py-2 text-sm"
           />
         </div>
 
@@ -62,7 +73,7 @@ export default function Topbar({ title, subtitle, children }: TopbarProps) {
         </button>
 
         {/* Admin Avatar */}
-        <div className="w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold text-white"
+        <div className="w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold text-white flex-shrink-0"
           style={{ background: "var(--gradient-primary)" }}>
           R
         </div>

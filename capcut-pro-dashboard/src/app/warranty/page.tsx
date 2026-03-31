@@ -11,6 +11,8 @@ import {
   Check,
   ArrowRight,
   Loader2,
+  LayoutList,
+  LayoutGrid,
 } from "lucide-react";
 
 interface WarrantyItem {
@@ -46,6 +48,7 @@ export default function WarrantyPage() {
   const [submitting, setSubmitting] = useState(false);
   const [claimForm, setClaimForm] = useState({ transactionId: "", claimReason: "" });
   const [claimResult, setClaimResult] = useState<{ newAccount?: { email: string; password: string }; message?: string } | null>(null);
+  const [viewMode, setViewMode] = useState<'table' | 'card'>('table');
 
   const fetchData = useCallback(() => {
     setLoading(true);
@@ -91,7 +94,7 @@ export default function WarrantyPage() {
     <>
       <Topbar title="Klaim Garansi" subtitle="Kelola klaim garansi dan penggantian akun pelanggan" />
 
-      <div className="px-8 pb-8 space-y-5">
+      <div className="px-4 md:px-8 pb-8 space-y-5">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="search-box flex-1 max-w-md">
             <Search size={16} className="search-icon" />
@@ -102,51 +105,77 @@ export default function WarrantyPage() {
           </button>
         </div>
 
+        {/* View Toggle mobile */}
+        <div className="flex items-center justify-between lg:hidden">
+          <p className="text-xs text-[var(--text-muted)]">Total {total} klaim</p>
+          <div className="flex gap-1">
+            <button className={`view-toggle-btn ${viewMode==='table'?'active':''}`} onClick={()=>setViewMode('table')}><LayoutList size={13}/> Tabel</button>
+            <button className={`view-toggle-btn ${viewMode==='card'?'active':''}`} onClick={()=>setViewMode('card')}><LayoutGrid size={13}/> Card</button>
+          </div>
+        </div>
+
         <div className="glass-card overflow-hidden">
           {loading ? (
-            <div className="flex items-center justify-center py-16"><Loader2 size={24} className="animate-spin text-[#818cf8]" /><span className="ml-2 text-[var(--text-secondary)]">Memuat...</span></div>
+            <div className="flex items-center justify-center py-16"><Loader2 size={24} className="animate-spin text-[#818cf8]"/><span className="ml-2 text-[var(--text-secondary)]">Memuat...</span></div>
           ) : (
             <>
-              <div className="overflow-x-auto">
-                <table className="data-table">
-                  <thead>
-                    <tr>
+              {viewMode==='table' && (
+                <div className="overflow-x-auto">
+                  <table className="data-table">
+                    <thead><tr>
                       <th>Transaksi</th>
                       <th>Pelanggan</th>
                       <th>Akun Lama → Baru</th>
                       <th>Alasan</th>
-                      <th>Status</th>
                       <th>Tanggal</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {claims.length === 0 ? (
-                      <tr><td colSpan={6} className="text-center py-8 text-[var(--text-muted)]">Belum ada klaim garansi</td></tr>
-                    ) : (
-                      claims.map((claim) => (
+                      <th className="sticky-col-head">Status</th>
+                    </tr></thead>
+                    <tbody>
+                      {claims.length===0 ? (
+                        <tr><td colSpan={6} className="text-center py-8 text-[var(--text-muted)]">Belum ada klaim garansi</td></tr>
+                      ) : claims.map((claim)=>(
                         <tr key={claim.id}>
-                          <td className="font-mono text-sm text-[#818cf8]">{claim.transaction?.lynkIdRef || claim.transaction?.id?.substring(0, 8) || "-"}</td>
+                          <td className="font-mono text-sm text-[#818cf8]">{claim.transaction?.lynkIdRef||claim.transaction?.id?.substring(0,8)||"-"}</td>
+                          <td><p className="font-medium">{claim.transaction?.user?.name||"-"}</p><p className="text-xs text-[var(--text-muted)]">{maskPhone(claim.transaction?.user?.whatsapp)}</p></td>
                           <td>
-                            <p className="font-medium">{claim.transaction?.user?.name || "-"}</p>
-                            <p className="text-xs text-[var(--text-muted)]">{maskPhone(claim.transaction?.user?.whatsapp)}</p>
-                          </td>
-                          <td>
-                            <div className="flex items-center gap-2 text-sm">
-                              <span className="text-rose-400 font-mono">{claim.oldAccount?.accountEmail || "—"}</span>
-                              <ArrowRight size={14} className="text-[var(--text-muted)]" />
-                              <span className="text-emerald-400 font-mono">{claim.newAccount?.accountEmail || "—"}</span>
+                            <div className="flex items-center gap-1.5 text-xs">
+                              <span className="text-rose-400 font-mono">{claim.oldAccount?.accountEmail||"—"}</span>
+                              <ArrowRight size={12} className="text-[var(--text-muted)] flex-shrink-0"/>
+                              <span className="text-emerald-400 font-mono">{claim.newAccount?.accountEmail||"—"}</span>
                             </div>
                           </td>
-                          <td className="text-[var(--text-secondary)] text-sm max-w-[200px] truncate">{claim.claimReason || "-"}</td>
-                          <td>{getClaimBadge(claim.status)}</td>
-                          <td className="text-[var(--text-secondary)] text-sm">{claim.createdAt ? new Date(claim.createdAt).toLocaleDateString("id-ID") : "-"}</td>
+                          <td className="text-[var(--text-secondary)] text-sm max-w-[160px] truncate">{claim.claimReason||"-"}</td>
+                          <td className="text-[var(--text-secondary)] text-sm">{claim.createdAt?new Date(claim.createdAt).toLocaleDateString("id-ID"):"-"}</td>
+                          <td className="sticky-col-body">{getClaimBadge(claim.status)}</td>
                         </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-              <div className="flex items-center justify-between px-6 py-4 border-t border-[rgba(99,102,241,0.08)]">
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+              {viewMode==='card' && (
+                <div className="data-card-grid">
+                  {claims.length===0 ? <p className="text-center py-8 text-[var(--text-muted)]">Belum ada klaim garansi</p> : claims.map((claim)=>(
+                    <div key={claim.id} className="data-card">
+                      <div className="flex items-start justify-between mb-3">
+                        <div className="min-w-0 flex-1 mr-2">
+                          <p className="font-semibold text-white text-sm truncate">{claim.transaction?.user?.name||"-"}</p>
+                          <p className="text-xs text-[var(--text-muted)]">{maskPhone(claim.transaction?.user?.whatsapp)}</p>
+                        </div>
+                        {getClaimBadge(claim.status)}
+                      </div>
+                      <div className="space-y-1.5 pt-2.5 border-t border-[rgba(99,102,241,0.08)]">
+                        <div className="data-card-row"><span className="data-card-label">ID Transaksi</span><span className="data-card-value font-mono text-xs text-[#818cf8]">{claim.transaction?.lynkIdRef||claim.transaction?.id?.substring(0,8)||"-"}</span></div>
+                        <div className="data-card-row"><span className="data-card-label">Akun Lama</span><span className="data-card-value font-mono text-xs text-rose-400">{claim.oldAccount?.accountEmail||"—"}</span></div>
+                        <div className="data-card-row"><span className="data-card-label">Akun Baru</span><span className="data-card-value font-mono text-xs text-emerald-400">{claim.newAccount?.accountEmail||"—"}</span></div>
+                        <div className="data-card-row"><span className="data-card-label">Alasan</span><span className="data-card-value">{claim.claimReason||"-"}</span></div>
+                        <div className="data-card-row"><span className="data-card-label">Tanggal</span><span className="data-card-value">{claim.createdAt?new Date(claim.createdAt).toLocaleDateString("id-ID"):"-"}</span></div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div className="px-4 md:px-6 py-4 border-t border-[rgba(99,102,241,0.08)]">
                 <p className="text-sm text-[var(--text-muted)]">Total {total} klaim garansi</p>
               </div>
             </>

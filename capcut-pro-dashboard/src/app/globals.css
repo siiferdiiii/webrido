@@ -413,3 +413,117 @@ body {
   border-color: rgba(99, 102, 241, 0.4);
   color: #818cf8;
 }
+
+/* ─────────────────────────────────────────────
+   Sticky / Frozen Columns
+───────────────────────────────────────────── */
+.sticky-col-head {
+  position: sticky;
+  right: 0;
+  z-index: 3;
+  background: var(--bg-secondary);
+}
+.sticky-col-body {
+  position: sticky;
+  right: 0;
+  z-index: 1;
+  background: var(--bg-card);
+  transition: background 0.15s ease;
+}
+/* keep sticky col bg in sync with row hover */
+.data-table tbody tr:hover td.sticky-col-body {
+  background: var(--bg-card-hover);
+}
+/* Left-edge shadow to visually separate frozen col */
+.sticky-col-head::before,
+.sticky-col-body::before {
+  content: '';
+  position: absolute;
+  top: 0; left: -14px;
+  width: 14px; height: 100%;
+  background: linear-gradient(to right, transparent, rgba(0,0,0,0.18));
+  pointer-events: none;
+}
+
+/* ─────────────────────────────────────────────
+   Mobile Page Content — no extra padding
+───────────────────────────────────────────── */
+@media (max-width: 1023px) {
+  /* Reduce page-level horizontal padding */
+  .page-content {
+    padding-left: 12px !important;
+    padding-right: 12px !important;
+  }
+  /* Mini stats grid 2 cols on small screens */
+  .stats-mini-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+  /* Summary badges: 1 col on very small */
+  .summary-badges-grid {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* ─────────────────────────────────────────────
+   Card View (mobile list alternative)
+───────────────────────────────────────────── */
+.data-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  padding: 14px 16px;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.data-card:hover {
+  border-color: var(--border-active);
+  box-shadow: var(--shadow-glow);
+}
+.data-card-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 0;
+}
+.data-card-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+.data-card-value {
+  font-size: 13px;
+  color: var(--text-primary);
+  text-align: right;
+  word-break: break-word;
+}
+.data-card-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+  padding: 12px;
+}
+
+/* ─────────────────────────────────────────────
+   View toggle button (mobile only)
+───────────────────────────────────────────── */
+.view-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 500;
+  border: 1px solid var(--border-color);
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.view-toggle-btn:hover,
+.view-toggle-btn.active {
+  border-color: rgba(99, 102, 241, 0.4);
+  color: #818cf8;
+  background: rgba(99, 102, 241, 0.08);
+}
+
