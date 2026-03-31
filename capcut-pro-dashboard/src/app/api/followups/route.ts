@@ -65,7 +65,7 @@ export async function POST(req: NextRequest) {
 
     // Send to n8n Webhook
     try {
-      const webhookUrl = "https://appsheetindonesia-dorrizstore.qxifii.easypanel.host/webhook/d335828a-be5b-4090-bf46-1da817ef2340";
+      const webhookUrl = "https://appsheetindonesia-dorrizstore.qxifii.easypanel.host/webhook/5ba40d68-0e44-4e0a-ac6a-b0df499653a4";
       const payload = {
         followupId: followup.id,
         title: followup.title,
