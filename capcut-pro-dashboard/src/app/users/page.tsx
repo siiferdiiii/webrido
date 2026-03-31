@@ -460,10 +460,10 @@ export default function UsersPage() {
                             {/* Status */}
                             <td>{getStatusBadge(user.subscriptionStatus)}</td>
 
-                            {/* Tag Column */}
+                            {/* Tag Column — display only, badge berwarna */}
                             <td>
-                              <div className="flex items-center gap-1 flex-wrap" style={{ minWidth: 120 }}>
-                                {user.tags?.length === 0 || !user.tags ? (
+                              <div className="flex items-center gap-1 flex-wrap" style={{ minWidth: 100 }}>
+                                {!user.tags || user.tags.length === 0 ? (
                                   <span className="text-xs text-[var(--text-muted)]">—</span>
                                 ) : (
                                   user.tags.slice(0, 3).map((ct) => (
@@ -481,65 +481,8 @@ export default function UsersPage() {
                                   ))
                                 )}
                                 {(user.tags?.length || 0) > 3 && (
-                                  <span className="text-[11px] text-[var(--text-muted)]">+{(user.tags?.length || 0) - 3}</span>
+                                  <span className="text-[11px] text-[var(--text-muted)]">+{(user.tags.length - 3)}</span>
                                 )}
-
-                                {/* Tombol assign tag */}
-                                <div className="relative" ref={isPopoverOpen ? popoverRef : null}>
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setTagPopoverUserId(isPopoverOpen ? null : user.id);
-                                    }}
-                                    className="flex items-center justify-center w-5 h-5 rounded-full border border-dashed border-[var(--border-color)] text-[var(--text-muted)] hover:border-[#818cf8] hover:text-[#818cf8] transition-all"
-                                    title="Tambah/hapus tag"
-                                  >
-                                    <Plus size={10} />
-                                  </button>
-
-                                  {/* Tag Popover */}
-                                  {isPopoverOpen && (
-                                    <div
-                                      className="absolute z-50 left-0 top-7 w-48 rounded-xl border border-[var(--border-color)] shadow-2xl overflow-hidden"
-                                      style={{ background: "rgba(15,17,30,0.97)", backdropFilter: "blur(16px)" }}
-                                      onClick={(e) => e.stopPropagation()}
-                                    >
-                                      <div className="px-3 py-2 border-b border-[var(--border-color)]">
-                                        <p className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Assign Tag</p>
-                                      </div>
-                                      {allTags.length === 0 ? (
-                                        <div className="px-3 py-3 text-xs text-[var(--text-muted)] text-center">
-                                          Belum ada tag.<br />
-                                          <button onClick={() => { setShowTagManager(true); setTagPopoverUserId(null); }} className="text-[#818cf8] underline mt-1">Buat tag dulu</button>
-                                        </div>
-                                      ) : (
-                                        <div className="py-1 max-h-48 overflow-y-auto">
-                                          {allTags.map((tag) => {
-                                            const has = userTagIds.has(tag.id);
-                                            const isToggling = togglingTag === tag.id;
-                                            return (
-                                              <button
-                                                key={tag.id}
-                                                onClick={() => toggleTagOnUser(user.id, tag.id, has)}
-                                                disabled={isToggling}
-                                                className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-white/5 transition-colors text-left"
-                                              >
-                                                <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ background: tag.color }} />
-                                                <span className="flex-1 text-[var(--text-secondary)]">{tag.name}</span>
-                                                {isToggling
-                                                  ? <Loader2 size={12} className="animate-spin text-[var(--text-muted)]" />
-                                                  : has
-                                                    ? <Check size={12} className="text-[#22c55e]" />
-                                                    : null
-                                                }
-                                              </button>
-                                            );
-                                          })}
-                                        </div>
-                                      )}
-                                    </div>
-                                  )}
-                                </div>
                               </div>
                             </td>
 
@@ -568,6 +511,84 @@ export default function UsersPage() {
                                     <MessageCircle size={15} />
                                   </a>
                                 )}
+
+                                {/* Tombol assign tag — jelas & berlabel */}
+                                <div className="relative" ref={isPopoverOpen ? popoverRef : null}>
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setTagPopoverUserId(isPopoverOpen ? null : user.id);
+                                    }}
+                                    className="flex items-center gap-1.5 px-2 py-1 rounded-lg text-xs font-medium transition-all"
+                                    style={{
+                                      height: 28,
+                                      background: isPopoverOpen ? "rgba(129,140,248,0.2)" : "rgba(129,140,248,0.08)",
+                                      border: "1px solid rgba(129,140,248,0.3)",
+                                      color: "#818cf8",
+                                    }}
+                                    title="Kelola tag pelanggan ini"
+                                  >
+                                    <Tag size={12} />
+                                    Tag
+                                  </button>
+
+                                  {/* Tag Popover */}
+                                  {isPopoverOpen && (
+                                    <div
+                                      className="absolute z-50 right-0 top-8 w-52 rounded-xl border border-[var(--border-color)] shadow-2xl overflow-hidden"
+                                      style={{ background: "rgba(15,17,30,0.97)", backdropFilter: "blur(16px)" }}
+                                      onClick={(e) => e.stopPropagation()}
+                                    >
+                                      <div className="px-3 py-2.5 border-b border-[var(--border-color)] flex items-center gap-2">
+                                        <Tag size={13} className="text-[#818cf8]" />
+                                        <p className="text-xs font-semibold text-white">Tag untuk {user.name.split(" ")[0]}</p>
+                                      </div>
+                                      {allTags.length === 0 ? (
+                                        <div className="px-3 py-4 text-xs text-[var(--text-muted)] text-center">
+                                          Belum ada tag.<br />
+                                          <button
+                                            onClick={() => { setShowTagManager(true); setTagPopoverUserId(null); }}
+                                            className="text-[#818cf8] underline mt-1.5 font-medium"
+                                          >
+                                            Buat tag dulu →
+                                          </button>
+                                        </div>
+                                      ) : (
+                                        <div className="py-1 max-h-52 overflow-y-auto">
+                                          {allTags.map((tag) => {
+                                            const has = userTagIds.has(tag.id);
+                                            const isToggling = togglingTag === tag.id;
+                                            return (
+                                              <button
+                                                key={tag.id}
+                                                onClick={() => toggleTagOnUser(user.id, tag.id, has)}
+                                                disabled={isToggling}
+                                                className="w-full flex items-center gap-2.5 px-3 py-2.5 text-sm hover:bg-white/5 transition-colors text-left"
+                                              >
+                                                <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ background: tag.color }} />
+                                                <span className="flex-1 text-[var(--text-secondary)]">{tag.name}</span>
+                                                {isToggling
+                                                  ? <Loader2 size={13} className="animate-spin text-[var(--text-muted)]" />
+                                                  : has
+                                                    ? <span className="flex items-center gap-1 text-[11px] font-semibold text-[#22c55e]"><Check size={11} /> Aktif</span>
+                                                    : <span className="text-[11px] text-[var(--text-muted)]">Tambah</span>
+                                                }
+                                              </button>
+                                            );
+                                          })}
+                                        </div>
+                                      )}
+                                      <div className="px-3 py-2 border-t border-[var(--border-color)]">
+                                        <button
+                                          onClick={() => { setShowTagManager(true); setTagPopoverUserId(null); }}
+                                          className="w-full text-xs text-[var(--text-muted)] hover:text-[#818cf8] transition-colors text-center"
+                                        >
+                                          + Buat tag baru
+                                        </button>
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
                               </div>
                             </td>
                           </tr>
