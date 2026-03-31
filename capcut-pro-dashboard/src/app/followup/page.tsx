@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, Suspense } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
 import Topbar from "@/components/Topbar";
 import { usePrivacy } from "@/context/PrivacyContext";
 import {
@@ -48,14 +49,19 @@ interface UserItem {
   whatsapp: string | null;
 }
 
-export default function FollowupPage() {
+// ─── Inner component yang butuh useSearchParams ───────────────────────────────
+function FollowupPageInner() {
   const { maskPhone, maskEmail } = usePrivacy();
+  const searchParams = useSearchParams();
+  const router = useRouter();
+
   const [followups, setFollowups] = useState<Followup[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [showDetail, setShowDetail] = useState<Followup | null>(null);
   const [statusFilter, setStatusFilter] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [importLoading, setImportLoading] = useState(false);
 
   // Form state
   const [formTitle, setFormTitle] = useState("");
@@ -82,6 +88,58 @@ export default function FollowupPage() {
   }, [statusFilter]);
 
   useEffect(() => { fetchFollowups(); }, [fetchFollowups]);
+
+  // ── Detect export params dari halaman Pelanggan ──────────────────────────────
+  useEffect(() => {
+    const isExport = searchParams.get("export") === "1";
+    if (!isExport) return;
+
+    const allUsers = searchParams.get("allUsers") === "1";
+    const usersParam = searchParams.get("users") || "";
+
+    setImportLoading(true);
+
+    const doImport = async () => {
+      let fetchedUsers: UserItem[] = [];
+
+      if (allUsers) {
+        // Kirim filter params ke API untuk fetch semua user sesuai kriteria
+        const params = new URLSearchParams();
+        params.set("allUsers", "1");
+        const s = searchParams.get("search"); if (s) params.set("search", s);
+        const st = searchParams.get("status"); if (st) params.set("status", st);
+        const fu = searchParams.get("followUp"); if (fu) params.set("followUp", fu);
+        const res = await fetch(`/api/users?${params}`);
+        const data = await res.json();
+        fetchedUsers = data.users || [];
+      } else if (usersParam) {
+        // Fetch user spesifik berdasarkan IDs
+        const res = await fetch(`/api/users?ids=${usersParam}`);
+        const data = await res.json();
+        fetchedUsers = data.users || [];
+      }
+
+      const recipients = fetchedUsers
+        .filter((u) => u.whatsapp)
+        .map((u) => ({
+          name: u.name,
+          phone: u.whatsapp!.replace(/^0/, "62").replace(/\D/g, ""),
+        }));
+
+      setFormRecipients(recipients);
+      setImportLoading(false);
+
+      if (recipients.length > 0) {
+        setShowForm(true);
+      }
+
+      // Bersihkan query params dari URL supaya tidak reload lagi
+      router.replace("/followup");
+    };
+
+    doImport();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const fetchCustomers = useCallback(async () => {
     setLoadingCustomers(true);
@@ -166,6 +224,19 @@ export default function FollowupPage() {
   };
 
   const previewTemplate = (template: string, name: string) => template.replace(/\{\{nama_customer\}\}/gi, name || "Kak");
+
+  // ── Loading overlay saat import ────────────────────────────────────────────
+  if (importLoading) {
+    return (
+      <div>
+        <Topbar title="Follow-Up Terjadwal" subtitle="Jadwalkan pengiriman pesan WA ke banyak penerima" />
+        <div className="flex flex-col items-center justify-center py-40 gap-4">
+          <Loader2 size={36} className="animate-spin text-[#818cf8]" />
+          <p className="text-[var(--text-secondary)] text-sm font-medium">Mengambil data pelanggan yang dipilih...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -332,7 +403,15 @@ export default function FollowupPage() {
         <div className="modal-overlay" onClick={() => setShowForm(false)}>
           <div className="modal-content" style={{ maxWidth: 560 }} onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h3 className="font-semibold text-white text-lg">Buat Jadwal Follow-Up</h3>
+              <div>
+                <h3 className="font-semibold text-white text-lg">Buat Jadwal Follow-Up</h3>
+                {formRecipients.length > 0 && (
+                  <p className="text-xs mt-1 flex items-center gap-1.5" style={{ color: "#818cf8" }}>
+                    <Users size={11} />
+                    {formRecipients.length} penerima diimpor dari halaman Pelanggan
+                  </p>
+                )}
+              </div>
               <button className="btn-icon" onClick={() => setShowForm(false)}><X size={18} /></button>
             </div>
 
@@ -487,5 +566,21 @@ export default function FollowupPage() {
         </div>
       )}
     </div>
+  );
+}
+
+// ─── Wrapper dengan Suspense (wajib karena useSearchParams) ──────────────────
+export default function FollowupPage() {
+  return (
+    <Suspense fallback={
+      <div>
+        <Topbar title="Follow-Up Terjadwal" subtitle="Jadwalkan pengiriman pesan WA ke banyak penerima" />
+        <div className="flex items-center justify-center py-40">
+          <Loader2 size={32} className="animate-spin text-[#818cf8]" />
+        </div>
+      </div>
+    }>
+      <FollowupPageInner />
+    </Suspense>
   );
 }

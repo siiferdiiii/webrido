@@ -13,6 +13,20 @@ export async function GET(req: NextRequest) {
     const limit = parseInt(searchParams.get("limit") || "20");
     const skip = (page - 1) * limit;
 
+    // Fetch semua user berdasarkan filter tanpa paginasi (untuk export follow-up)
+    const allUsers = searchParams.get("allUsers") === "1";
+
+    // Fetch user spesifik berdasarkan IDs
+    const idsParam = searchParams.get("ids") || "";
+    if (idsParam) {
+      const ids = idsParam.split(",").filter(Boolean);
+      const users = await prisma.user.findMany({
+        where: { id: { in: ids } },
+        select: { id: true, name: true, email: true, whatsapp: true },
+      });
+      return NextResponse.json({ users, total: users.length });
+    }
+
     const where: Record<string, unknown> = {};
 
     if (search) {
@@ -32,13 +46,23 @@ export async function GET(req: NextRequest) {
 
     // Tentukan order by awal untuk Prisma
     let orderBy: any = { createdAt: "desc" };
-    
+
     if (sortBy === "total_trx_desc") {
       orderBy = { transactions: { _count: "desc" } };
     } else if (sortBy === "total_trx_asc") {
       orderBy = { transactions: { _count: "asc" } };
     } else if (sortBy === "terlama") {
       orderBy = { createdAt: "asc" };
+    }
+
+    // Jika allUsers=1, ambil semua tanpa paginasi (hanya field yang diperlukan untuk follow-up)
+    if (allUsers) {
+      const users = await prisma.user.findMany({
+        where,
+        select: { id: true, name: true, email: true, whatsapp: true },
+        orderBy,
+      });
+      return NextResponse.json({ users, total: users.length });
     }
 
     const [users, total] = await Promise.all([
@@ -62,12 +86,12 @@ export async function GET(req: NextRequest) {
     // Jika sorting by last transaction date, terpaksa lakukan manual di memory karena Prisma
     // tidak support orderBy dari tabel relasi array hasMany() secara langsung
     let finalUsers = users;
-    
+
     if (sortBy === "last_trx_desc" || sortBy === "last_trx_asc") {
       finalUsers.sort((a, b) => {
         const dateA = a.transactions[0]?.purchaseDate ? new Date(a.transactions[0].purchaseDate).getTime() : 0;
         const dateB = b.transactions[0]?.purchaseDate ? new Date(b.transactions[0].purchaseDate).getTime() : 0;
-        
+
         return sortBy === "last_trx_desc" ? dateB - dateA : dateA - dateB;
       });
       // Paginasi manual

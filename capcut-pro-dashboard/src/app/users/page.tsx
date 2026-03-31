@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import Topbar from "@/components/Topbar";
 import { usePrivacy } from "@/context/PrivacyContext";
 import {
@@ -11,6 +12,10 @@ import {
   Loader2,
   X,
   Receipt,
+  CheckSquare,
+  Square,
+  Send,
+  Users,
 } from "lucide-react";
 
 interface UserItem {
@@ -65,12 +70,18 @@ function formatDate(dateStr: string | null) {
 
 export default function UsersPage() {
   const { maskEmail, maskPhone } = usePrivacy();
+  const router = useRouter();
+
   const [users, setUsers] = useState<UserItem[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("Semua");
   const [sortBy, setSortBy] = useState("terbaru");
+
+  // Selection state
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [selectAllDB, setSelectAllDB] = useState(false);
 
   // Modal State
   const [showModal, setShowModal] = useState(false);
@@ -82,8 +93,7 @@ export default function UsersPage() {
     return new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", minimumFractionDigits: 0 }).format(amount);
   };
 
-  const fetchData = useCallback(() => {
-    setLoading(true);
+  const buildFilterParams = useCallback(() => {
     const params = new URLSearchParams();
     if (search) params.set("search", search);
     if (filter === "Aktif") params.set("status", "active");
@@ -93,36 +103,88 @@ export default function UsersPage() {
     else if (filter === "Follow Up 3") params.set("followUp", "follow_up_3");
     else if (filter === "Cold") params.set("followUp", "cold");
     else if (filter === "Project Only") params.set("followUp", "project_only");
-    
     params.set("sortBy", sortBy);
+    return params;
+  }, [search, filter, sortBy]);
 
-    fetch(`/api/users?${params}`)
+  const fetchData = useCallback(() => {
+    setLoading(true);
+    // Reset selection when filter changes
+    setSelectedIds(new Set());
+    setSelectAllDB(false);
+
+    fetch(`/api/users?${buildFilterParams()}`)
       .then((res) => res.json())
       .then((json) => { setUsers(json.users || []); setTotal(json.total || 0); })
       .catch(console.error)
       .finally(() => setLoading(false));
-  }, [search, filter, sortBy]);
+  }, [buildFilterParams]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
+  // ─── Selection helpers ───────────────────────────────────────
+  const allVisibleSelected = users.length > 0 && users.every((u) => selectedIds.has(u.id));
+  const someSelected = selectedIds.size > 0;
+
+  const toggleSelectAll = () => {
+    if (allVisibleSelected) {
+      setSelectedIds(new Set());
+      setSelectAllDB(false);
+    } else {
+      setSelectedIds(new Set(users.map((u) => u.id)));
+    }
+  };
+
+  const toggleOne = (id: string) => {
+    const next = new Set(selectedIds);
+    if (next.has(id)) {
+      next.delete(id);
+      setSelectAllDB(false);
+    } else {
+      next.add(id);
+    }
+    setSelectedIds(next);
+  };
+
+  const clearSelection = () => {
+    setSelectedIds(new Set());
+    setSelectAllDB(false);
+  };
+
+  // ─── Export ke Follow-Up ──────────────────────────────────────
+  const exportToFollowUp = () => {
+    const params = new URLSearchParams();
+    params.set("export", "1");
+
+    if (selectAllDB) {
+      // Kirim filter params saja, biarkan followup page yang fetch
+      params.set("allUsers", "1");
+      const filterParams = buildFilterParams();
+      filterParams.forEach((v, k) => { if (k !== "sortBy") params.set(k, v); });
+    } else {
+      // Kirim list ID
+      params.set("users", Array.from(selectedIds).join(","));
+    }
+
+    router.push(`/followup?${params}`);
+  };
+
+  // ─── Follow-up action ─────────────────────────────────────────
   async function handleFollowUp(user: UserItem) {
     const followUp = user.followUpStatus || "none";
     const template = followUpTemplates[followUp] || followUpTemplates.follow_up_1;
     const message = template.replace("{name}", user.name);
     const nextStatus = getNextFollowUp(followUp);
 
-    // Buka WhatsApp
     const waUrl = `https://wa.me/${user.whatsapp?.replace(/^0/, "62")}?text=${encodeURIComponent(message)}`;
     window.open(waUrl, "_blank");
 
-    // Update status follow-up ke level berikutnya
     await fetch(`/api/users/${user.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ followUpStatus: nextStatus }),
     });
 
-    // Catat pesan di message_logs
     await fetch("/api/messages", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -146,9 +208,7 @@ export default function UsersPage() {
     try {
       const res = await fetch(`/api/users/${user.id}/transactions`);
       const json = await res.json();
-      if (json.success) {
-        setUserTransactions(json.transactions);
-      }
+      if (json.success) setUserTransactions(json.transactions);
     } catch (e) {
       console.error("Gagal get transactions:", e);
     }
@@ -184,6 +244,8 @@ export default function UsersPage() {
   const needsFollowUp = (user: UserItem) =>
     user.subscriptionStatus !== "active" && user.followUpStatus !== "none" && user.followUpStatus !== null;
 
+  const selectionCount = selectAllDB ? total : selectedIds.size;
+
   return (
     <>
       <Topbar title="Pelanggan" subtitle="Kelola data pelanggan dan sistem retensi follow-up" />
@@ -216,10 +278,48 @@ export default function UsersPage() {
             <div className="flex items-center justify-center py-16"><Loader2 size={24} className="animate-spin text-[#818cf8]" /><span className="ml-2 text-[var(--text-secondary)]">Memuat...</span></div>
           ) : (
             <>
+              {/* ── Banner pilih semua DB ── */}
+              {allVisibleSelected && total > users.length && !selectAllDB && (
+                <div className="flex items-center justify-center gap-3 py-3 px-6" style={{ background: "rgba(99,102,241,0.08)", borderBottom: "1px solid rgba(99,102,241,0.15)" }}>
+                  <span className="text-sm text-[var(--text-secondary)]">
+                    {users.length} user di halaman ini dipilih.
+                  </span>
+                  <button
+                    onClick={() => setSelectAllDB(true)}
+                    className="text-sm font-semibold text-[#818cf8] hover:text-[#a5b4fc] transition-colors underline underline-offset-2"
+                  >
+                    Pilih semua {total} user dari hasil filter ini
+                  </button>
+                </div>
+              )}
+              {selectAllDB && (
+                <div className="flex items-center justify-center gap-3 py-3 px-6" style={{ background: "rgba(99,102,241,0.12)", borderBottom: "1px solid rgba(99,102,241,0.2)" }}>
+                  <span className="text-sm font-medium text-[#818cf8]">
+                    ✓ Semua {total} user dari filter ini dipilih.
+                  </span>
+                  <button onClick={() => { setSelectAllDB(false); setSelectedIds(new Set()); }}
+                    className="text-sm text-[var(--text-muted)] hover:text-white transition-colors">
+                    Batalkan
+                  </button>
+                </div>
+              )}
+
               <div className="overflow-x-auto">
                 <table className="data-table">
                   <thead>
                     <tr>
+                      <th style={{ width: 44, paddingLeft: 20 }}>
+                        <button
+                          onClick={toggleSelectAll}
+                          className="flex items-center justify-center text-[var(--text-muted)] hover:text-[#818cf8] transition-colors"
+                          title={allVisibleSelected ? "Batalkan semua" : "Pilih semua yang tampil"}
+                        >
+                          {allVisibleSelected
+                            ? <CheckSquare size={16} className="text-[#818cf8]" />
+                            : <Square size={16} />
+                          }
+                        </button>
+                      </th>
                       <th>Pelanggan</th>
                       <th>WhatsApp</th>
                       <th>Tipe</th>
@@ -232,35 +332,52 @@ export default function UsersPage() {
                   </thead>
                   <tbody>
                     {users.length === 0 ? (
-                      <tr><td colSpan={8} className="text-center py-8 text-[var(--text-muted)]">Belum ada pelanggan</td></tr>
+                      <tr><td colSpan={9} className="text-center py-8 text-[var(--text-muted)]">Belum ada pelanggan</td></tr>
                     ) : (
-                      users.map((user) => (
-                        <tr key={user.id}>
-                          <td>
-                            <p className="font-medium">{user.name}</p>
-                            <p className="text-xs text-[var(--text-muted)]">{maskEmail(user.email)}</p>
-                          </td>
-                          <td className="text-sm">{maskPhone(user.whatsapp)}</td>
-                          <td>{getTypeBadge(user.customerType)}</td>
-                          <td>{getStatusBadge(user.subscriptionStatus)}</td>
-                          <td>{getFollowUpBadge(user.followUpStatus)}</td>
-                          <td className="text-center font-semibold">{user._count.transactions}</td>
-                          <td className="text-sm text-[var(--text-secondary)]">
-                            {user.transactions[0] ? formatDate(user.transactions[0].purchaseDate) : "-"}
-                          </td>
-                          <td>
-                            <div className="flex items-center gap-1">
-                              <button className="btn-icon" style={{ width: 32, height: 32 }} title="Lihat Detail Transaksi" onClick={() => openUserTransactions(user)}><Eye size={15} /></button>
-                              <button className="btn-icon" style={{ width: 32, height: 32 }} title="Edit"><Edit2 size={15} /></button>
-                              {(needsFollowUp(user) || user.subscriptionStatus !== "active") && user.whatsapp && (
-                                <button className="btn-success btn-sm" onClick={() => handleFollowUp(user)} title="Follow Up WhatsApp">
-                                  <MessageCircle size={14} /> WA
-                                </button>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      ))
+                      users.map((user) => {
+                        const isSelected = selectAllDB || selectedIds.has(user.id);
+                        return (
+                          <tr
+                            key={user.id}
+                            style={isSelected ? { background: "rgba(99,102,241,0.07)" } : undefined}
+                          >
+                            <td style={{ paddingLeft: 20, paddingRight: 8 }}>
+                              <button
+                                onClick={() => { if (!selectAllDB) toggleOne(user.id); }}
+                                className={`flex items-center justify-center transition-colors ${selectAllDB ? "opacity-50 cursor-not-allowed" : "hover:text-[#818cf8]"} text-[var(--text-muted)]`}
+                              >
+                                {isSelected
+                                  ? <CheckSquare size={16} className="text-[#818cf8]" />
+                                  : <Square size={16} />
+                                }
+                              </button>
+                            </td>
+                            <td>
+                              <p className="font-medium">{user.name}</p>
+                              <p className="text-xs text-[var(--text-muted)]">{maskEmail(user.email)}</p>
+                            </td>
+                            <td className="text-sm">{maskPhone(user.whatsapp)}</td>
+                            <td>{getTypeBadge(user.customerType)}</td>
+                            <td>{getStatusBadge(user.subscriptionStatus)}</td>
+                            <td>{getFollowUpBadge(user.followUpStatus)}</td>
+                            <td className="text-center font-semibold">{user._count.transactions}</td>
+                            <td className="text-sm text-[var(--text-secondary)]">
+                              {user.transactions[0] ? formatDate(user.transactions[0].purchaseDate) : "-"}
+                            </td>
+                            <td>
+                              <div className="flex items-center gap-1">
+                                <button className="btn-icon" style={{ width: 32, height: 32 }} title="Lihat Detail Transaksi" onClick={() => openUserTransactions(user)}><Eye size={15} /></button>
+                                <button className="btn-icon" style={{ width: 32, height: 32 }} title="Edit"><Edit2 size={15} /></button>
+                                {(needsFollowUp(user) || user.subscriptionStatus !== "active") && user.whatsapp && (
+                                  <button className="btn-success btn-sm" onClick={() => handleFollowUp(user)} title="Follow Up WhatsApp">
+                                    <MessageCircle size={14} /> WA
+                                  </button>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })
                     )}
                   </tbody>
                 </table>
@@ -271,6 +388,81 @@ export default function UsersPage() {
             </>
           )}
         </div>
+      </div>
+
+      {/* ── Floating Action Bar ── */}
+      <div
+        style={{
+          position: "fixed",
+          bottom: someSelected ? 32 : -100,
+          left: "50%",
+          transform: "translateX(-50%)",
+          transition: "bottom 0.3s cubic-bezier(0.34,1.56,0.64,1)",
+          zIndex: 50,
+          display: "flex",
+          alignItems: "center",
+          gap: 12,
+          padding: "12px 20px",
+          background: "rgba(15,17,30,0.92)",
+          backdropFilter: "blur(16px)",
+          borderRadius: 16,
+          border: "1px solid rgba(99,102,241,0.35)",
+          boxShadow: "0 8px 32px rgba(0,0,0,0.5), 0 0 0 1px rgba(99,102,241,0.1)",
+          whiteSpace: "nowrap",
+        }}
+      >
+        <span className="flex items-center gap-2 text-sm font-medium text-white">
+          <Users size={15} className="text-[#818cf8]" />
+          <span className="text-[#818cf8] font-bold">{selectionCount}</span>
+          <span className="text-[var(--text-secondary)]">user dipilih</span>
+        </span>
+
+        <div style={{ width: 1, height: 20, background: "rgba(255,255,255,0.1)" }} />
+
+        <button
+          onClick={exportToFollowUp}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
+            padding: "7px 14px",
+            background: "linear-gradient(135deg, #6366f1, #818cf8)",
+            borderRadius: 10,
+            border: "none",
+            color: "white",
+            fontSize: 13,
+            fontWeight: 600,
+            cursor: "pointer",
+            transition: "opacity 0.2s",
+          }}
+          onMouseOver={(e) => (e.currentTarget.style.opacity = "0.85")}
+          onMouseOut={(e) => (e.currentTarget.style.opacity = "1")}
+        >
+          <Send size={14} />
+          Export ke Follow-Up
+        </button>
+
+        <button
+          onClick={clearSelection}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            width: 30,
+            height: 30,
+            background: "rgba(255,255,255,0.07)",
+            borderRadius: 8,
+            border: "1px solid rgba(255,255,255,0.1)",
+            color: "var(--text-muted)",
+            cursor: "pointer",
+            transition: "background 0.2s",
+          }}
+          title="Batalkan pilihan"
+          onMouseOver={(e) => (e.currentTarget.style.background = "rgba(255,255,255,0.12)")}
+          onMouseOut={(e) => (e.currentTarget.style.background = "rgba(255,255,255,0.07)")}
+        >
+          <X size={14} />
+        </button>
       </div>
 
       {/* Modal Histori Transaksi */}
