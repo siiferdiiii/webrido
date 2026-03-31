@@ -101,21 +101,30 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    // 4. Ban akun lama, set akun baru ke in_use
+    // 4. Update akun lama: kurangi slot, jangan ban jika masih ada sisa slot
     if (transaction.stockAccountId) {
+      const oldAccount = transaction.stockAccount;
+      const currentUsedSlots = oldAccount?.usedSlots ?? 1;
+      const oldMaxSlots = oldAccount?.maxSlots ?? defaultMaxSlots;
+      const newUsedSlotsOld = Math.max(0, currentUsedSlots - 1);
+
+      // Status: jika masih ada slot yang terpakai → in_use, jika kosong → available
+      // Tidak pernah auto-banned hanya karena klaim garansi
+      const oldAccountStatus = newUsedSlotsOld > 0 ? "in_use" : "available";
+
       await prisma.stockAccount.update({
         where: { id: transaction.stockAccountId },
         data: {
-          status: "banned",
-          notes: claimReason || "Klaim garansi",
-          usedSlots: { decrement: 1 },
+          status: oldAccountStatus,
+          usedSlots: newUsedSlotsOld,
+          notes: `Klaim garansi: sisa ${newUsedSlotsOld}/${oldMaxSlots} slot. ${claimReason || ""}`.trim(),
         },
       });
     }
 
     // Set akun baru ke in_use dan increment slot
     const newUsedSlots = (newAccount.usedSlots ?? 0) + 1;
-    const newMaxSlots = newAccount.maxSlots ?? 3;
+    const newMaxSlots = newAccount.maxSlots ?? defaultMaxSlots;
     await prisma.stockAccount.update({
       where: { id: newAccount.id },
       data: {
