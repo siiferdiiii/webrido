@@ -8,7 +8,6 @@ import {
   Search,
   MessageCircle,
   Eye,
-  Edit2,
   Loader2,
   X,
   Receipt,
@@ -367,7 +366,18 @@ export default function UsersPage() {
                             <td>
                               <div className="flex items-center gap-1">
                                 <button className="btn-icon" style={{ width: 32, height: 32 }} title="Lihat Detail Transaksi" onClick={() => openUserTransactions(user)}><Eye size={15} /></button>
-                                <button className="btn-icon" style={{ width: 32, height: 32 }} title="Edit"><Edit2 size={15} /></button>
+                                {user.whatsapp && (
+                                  <a
+                                    href={`https://wa.me/${user.whatsapp.replace(/^0/, "62").replace(/\D/g, "")}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="btn-icon"
+                                    style={{ width: 32, height: 32, display: "flex", alignItems: "center", justifyContent: "center", color: "#25d366" }}
+                                    title="Chat WhatsApp"
+                                  >
+                                    <MessageCircle size={15} />
+                                  </a>
+                                )}
                                 {(needsFollowUp(user) || user.subscriptionStatus !== "active") && user.whatsapp && (
                                   <button className="btn-success btn-sm" onClick={() => handleFollowUp(user)} title="Follow Up WhatsApp">
                                     <MessageCircle size={14} /> WA
