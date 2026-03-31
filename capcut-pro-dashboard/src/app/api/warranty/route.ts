@@ -64,21 +64,26 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Transaksi tidak ditemukan" }, { status: 404 });
     }
 
-    // 2. Cari akun baru yang tersedia (status available, atau in_use tapi masih ada slot tersisa)
+    // 2. Tentukan productType dari akun lama agar akun pengganti sesuai tipe produk
+    const oldProductType = transaction.stockAccount?.productType ?? "mobile";
+    const defaultMaxSlots = oldProductType === "desktop" ? 2 : 3;
+
+    // Cari akun baru yang tersedia dengan productType yang SAMA
     const candidateAccounts = await prisma.stockAccount.findMany({
       where: {
         status: { in: ["available", "in_use"] },
+        productType: oldProductType,
       },
       orderBy: { createdAt: "asc" },
     });
 
     const newAccount = candidateAccounts.find(acc =>
       acc.status === "available" ||
-      (acc.status === "in_use" && (acc.usedSlots ?? 0) < (acc.maxSlots ?? 3))
+      (acc.status === "in_use" && (acc.usedSlots ?? 0) < (acc.maxSlots ?? defaultMaxSlots))
     ) ?? null;
 
     if (!newAccount) {
-      return NextResponse.json({ error: "Stok akun habis! Semua akun sudah penuh." }, { status: 400 });
+      return NextResponse.json({ error: `Stok akun ${oldProductType} habis! Semua akun ${oldProductType} sudah penuh.` }, { status: 400 });
     }
 
     // 3. Buat klaim garansi
