@@ -3,6 +3,8 @@
 import { useState, useEffect, useCallback, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Topbar from "@/components/Topbar";
+import LiveIndicator from "@/components/LiveIndicator";
+import { useAutoRefresh } from "@/hooks/useAutoRefresh";
 import { usePrivacy } from "@/context/PrivacyContext";
 import {
   Plus,
@@ -91,6 +93,9 @@ function FollowupPageInner() {
   }, [statusFilter]);
 
   useEffect(() => { fetchFollowups(); }, [fetchFollowups]);
+
+  // Auto-refresh every 20 seconds
+  const { secondsAgo, isRefreshing, refresh } = useAutoRefresh(fetchFollowups, { intervalMs: 20000 });
 
   // ── Detect export params dari halaman Pelanggan ──────────────────────────────
   useEffect(() => {
@@ -241,6 +246,7 @@ function FollowupPageInner() {
   return (
     <div>
       <Topbar title="Follow-Up Terjadwal" subtitle="Jadwalkan pengiriman pesan WA ke banyak penerima">
+        <LiveIndicator secondsAgo={secondsAgo} isRefreshing={isRefreshing} onRefresh={refresh} intervalLabel="20 dtk" />
         <button onClick={() => { setShowForm(true); resetForm(); }} className="btn-primary">
           <Plus size={16} /> Buat Jadwal
         </button>

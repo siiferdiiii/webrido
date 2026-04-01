@@ -4,6 +4,8 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import Topbar from "@/components/Topbar";
+import LiveIndicator from "@/components/LiveIndicator";
+import { useAutoRefresh } from "@/hooks/useAutoRefresh";
 import { usePrivacy } from "@/context/PrivacyContext";
 import {
   Search,
@@ -164,6 +166,9 @@ export default function UsersPage() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
+  // Auto-refresh every 30 seconds
+  const { secondsAgo, isRefreshing, refresh } = useAutoRefresh(fetchData, { intervalMs: 30000 });
+
   // Close popover on outside click or scroll
   useEffect(() => {
     if (!tagPopoverUserId) return;
@@ -311,7 +316,9 @@ export default function UsersPage() {
 
   return (
     <>
-      <Topbar title="Pelanggan" subtitle="Kelola data pelanggan dan sistem retensi follow-up" />
+      <Topbar title="Pelanggan" subtitle="Kelola data pelanggan dan sistem retensi follow-up">
+        <LiveIndicator secondsAgo={secondsAgo} isRefreshing={isRefreshing} onRefresh={refresh} intervalLabel="30 dtk" />
+      </Topbar>
 
       <div className="px-4 md:px-8 pb-8 space-y-5">
         {/* ── Toolbar ── */}
