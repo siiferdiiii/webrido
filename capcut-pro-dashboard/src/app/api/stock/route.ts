@@ -23,7 +23,7 @@ export async function GET(req: NextRequest) {
     if (status && status !== "all") where.status = status;
     if (productType && productType !== "all") where.productType = productType;
 
-    const [accounts, total, stats] = await Promise.all([
+    const [accounts, total, stats, mobileAccounts, desktopAccounts] = await Promise.all([
       prisma.stockAccount.findMany({
         where,
         include: {
@@ -41,14 +41,34 @@ export async function GET(req: NextRequest) {
         by: ["status"],
         _count: true,
       }),
+      // Sisa slot akun mobile (available + in_use yang belum penuh)
+      prisma.stockAccount.findMany({
+        where: { productType: "mobile", status: { in: ["available", "in_use"] } },
+        select: { maxSlots: true, usedSlots: true },
+      }),
+      // Sisa slot akun desktop (available + in_use yang belum penuh)
+      prisma.stockAccount.findMany({
+        where: { productType: "desktop", status: { in: ["available", "in_use"] } },
+        select: { maxSlots: true, usedSlots: true },
+      }),
     ]);
 
-    const statusCounts: Record<string, number> = { available: 0, full: 0, banned: 0, expired: 0 };
+    const statusCounts: Record<string, number> = { available: 0, in_use: 0, sold: 0 };
     stats.forEach((s) => {
-      if (s.status) statusCounts[s.status] = s._count;
+      if (s.status === "available") statusCounts.available = s._count;
+      else if (s.status === "in_use") statusCounts.in_use = s._count;
+      else if (s.status === "sold" || s.status === "full") statusCounts.sold = (statusCounts.sold || 0) + s._count;
     });
 
-    return NextResponse.json({ accounts, total, page, limit, statusCounts });
+    // Hitung total sisa slot kumulatif per tipe
+    const remainingSlotsMobile = mobileAccounts.reduce((sum, acc) => {
+      return sum + Math.max(0, (acc.maxSlots ?? 3) - (acc.usedSlots ?? 0));
+    }, 0);
+    const remainingSlotsDesktop = desktopAccounts.reduce((sum, acc) => {
+      return sum + Math.max(0, (acc.maxSlots ?? 2) - (acc.usedSlots ?? 0));
+    }, 0);
+
+    return NextResponse.json({ accounts, total, page, limit, statusCounts, remainingSlotsMobile, remainingSlotsDesktop });
   } catch (error) {
     console.error("GET /api/stock error:", error);
     return NextResponse.json({ error: "Gagal mengambil stok akun" }, { status: 500 });

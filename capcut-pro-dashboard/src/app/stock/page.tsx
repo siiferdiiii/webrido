@@ -34,15 +34,19 @@ interface StockResponse {
   accounts: StockItem[];
   total: number;
   statusCounts: Record<string, number>;
+  remainingSlotsMobile: number;
+  remainingSlotsDesktop: number;
 }
 
-const statusFilters = ["Semua", "available", "full", "banned", "expired"];
-const statusLabels: Record<string, string> = { Semua: "Semua", available: "Tersedia", full: "Penuh", banned: "Banned", expired: "Expired" };
+const statusFilters = ["Semua", "available", "in_use", "sold"];
+const statusLabels: Record<string, string> = { Semua: "Semua", available: "Tersedia", in_use: "Digunakan", sold: "Sold" };
 
 function getStockBadge(status: string | null) {
   switch (status) {
     case "available": return <span className="badge badge-success">Tersedia</span>;
-    case "full": return <span className="badge badge-info">Penuh</span>;
+    case "in_use": return <span className="badge badge-info">Digunakan</span>;
+    case "sold": return <span className="badge badge-neutral">Sold</span>;
+    case "full": return <span className="badge badge-neutral">Sold</span>;
     case "banned": return <span className="badge badge-danger">Banned</span>;
     case "expired": return <span className="badge badge-warning">Expired</span>;
     default: return <span className="badge badge-neutral">{status}</span>;
@@ -134,7 +138,9 @@ export default function StockPage() {
   }
 
   const accounts = data?.accounts || [];
-  const sc = data?.statusCounts || { available: 0, full: 0, banned: 0, expired: 0 };
+  const sc = data?.statusCounts || { available: 0, in_use: 0, sold: 0 };
+  const remainingSlotsMobile = data?.remainingSlotsMobile ?? 0;
+  const remainingSlotsDesktop = data?.remainingSlotsDesktop ?? 0;
 
   return (
     <>
@@ -142,22 +148,32 @@ export default function StockPage() {
 
       <div className="px-4 md:px-8 pb-8 space-y-5">
         {/* Mini Stats */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 max-w-2xl">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-3 max-w-4xl">
           <div className="glass-card p-4 text-center">
             <p className="text-2xl font-bold text-emerald-400">{sc.available || 0}</p>
             <p className="text-xs text-[var(--text-muted)] mt-1">Tersedia</p>
           </div>
           <div className="glass-card p-4 text-center">
-            <p className="text-2xl font-bold text-cyan-400">{sc.full || 0}</p>
-            <p className="text-xs text-[var(--text-muted)] mt-1">Penuh</p>
+            <p className="text-2xl font-bold text-cyan-400">{sc.in_use || 0}</p>
+            <p className="text-xs text-[var(--text-muted)] mt-1">Digunakan</p>
           </div>
           <div className="glass-card p-4 text-center">
-            <p className="text-2xl font-bold text-rose-400">{sc.banned || 0}</p>
-            <p className="text-xs text-[var(--text-muted)] mt-1">Banned</p>
+            <p className="text-2xl font-bold text-slate-400">{sc.sold || 0}</p>
+            <p className="text-xs text-[var(--text-muted)] mt-1">Sold</p>
           </div>
-          <div className="glass-card p-4 text-center">
-            <p className="text-2xl font-bold text-amber-400">{sc.expired || 0}</p>
-            <p className="text-xs text-[var(--text-muted)] mt-1">Expired</p>
+          <div className="glass-card p-4 text-center border border-green-500/20">
+            <div className="flex items-center justify-center gap-1.5 mb-1">
+              <Smartphone size={13} className="text-green-400" />
+              <p className="text-2xl font-bold text-green-400">{remainingSlotsMobile}</p>
+            </div>
+            <p className="text-xs text-[var(--text-muted)]">Sisa Slot Mobile</p>
+          </div>
+          <div className="glass-card p-4 text-center border border-blue-500/20">
+            <div className="flex items-center justify-center gap-1.5 mb-1">
+              <Monitor size={13} className="text-blue-400" />
+              <p className="text-2xl font-bold text-blue-400">{remainingSlotsDesktop}</p>
+            </div>
+            <p className="text-xs text-[var(--text-muted)]">Sisa Slot Desktop</p>
           </div>
         </div>
 
