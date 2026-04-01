@@ -1,6 +1,30 @@
 import { prisma } from "@/lib/db";
 import { NextRequest, NextResponse } from "next/server";
 
+const WARRANTY_WEBHOOK_URL =
+  "https://appsheetindonesia-dorrizstore.qxifii.easypanel.host/webhook/25ef64ae-a473-4f33-9549-d4a86138d14e";
+
+async function sendWarrantyWebhook(payload: {
+  nama: string;
+  email: string;
+  no_hp: string;
+  akun_email: string;
+  akun_password: string;
+  alasan_klaim: string;
+  tanggal_klaim: string;
+}) {
+  try {
+    await fetch(WARRANTY_WEBHOOK_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    console.log("[Warranty Webhook] Berhasil dikirim untuk:", payload.email);
+  } catch (err) {
+    console.error("[Warranty Webhook] Gagal mengirim webhook:", err);
+  }
+}
+
 // GET /api/warranty - Ambil semua klaim garansi
 export async function GET(req: NextRequest) {
   try {
@@ -54,10 +78,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "ID transaksi wajib diisi" }, { status: 400 });
     }
 
-    // 1. Ambil transaksi dan akun lama
+    // 1. Ambil transaksi dan akun lama (include user dengan email)
     const transaction = await prisma.transaction.findUnique({
       where: { id: transactionId },
-      include: { stockAccount: true, user: true },
+      include: {
+        stockAccount: true,
+        user: { select: { name: true, email: true, whatsapp: true } },
+      },
     });
 
     if (!transaction) {
@@ -137,6 +164,17 @@ export async function POST(req: NextRequest) {
     await prisma.transaction.update({
       where: { id: transactionId },
       data: { stockAccountId: newAccount.id },
+    });
+
+    // 6. Kirim data ke webhook (fire-and-forget, tidak memblokir response)
+    sendWarrantyWebhook({
+      nama: transaction.user?.name ?? "-",
+      email: transaction.user?.email ?? "-",
+      no_hp: transaction.user?.whatsapp ?? "-",
+      akun_email: newAccount.accountEmail,
+      akun_password: newAccount.accountPassword,
+      alasan_klaim: claimReason || "Tidak disebutkan",
+      tanggal_klaim: new Date().toISOString(),
     });
 
     return NextResponse.json({
