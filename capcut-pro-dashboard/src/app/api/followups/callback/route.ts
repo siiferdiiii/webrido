@@ -41,7 +41,14 @@ export async function POST(req: NextRequest) {
       const parent = recipient.followup;
       const totalRecipients = parent?.totalRecipients || 0;
       
-      const newParentStatus = (sentCount >= totalRecipients && totalRecipients > 0) ? "completed" : parent?.status;
+      let newParentStatus: string;
+      if (sentCount >= totalRecipients && totalRecipients > 0) {
+        newParentStatus = "completed";
+      } else if (sentCount > 0) {
+        newParentStatus = "processing";
+      } else {
+        newParentStatus = parent?.status || "pending";
+      }
 
       await prisma.scheduledFollowup.update({
         where: { id: parentId },

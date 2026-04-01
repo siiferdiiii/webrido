@@ -12,11 +12,24 @@ export async function GET(req: NextRequest) {
 
     const followups = await prisma.scheduledFollowup.findMany({
       where,
-      include: { _count: { select: { recipients: true } } },
+      include: {
+        _count: { select: { recipients: true } },
+        recipients: { select: { status: true } },
+      },
       orderBy: { scheduledAt: "desc" },
     });
 
-    return NextResponse.json({ followups });
+    // Hitung sentCount secara dinamis dari status recipient (bukan dari field stored)
+    const followupsWithCount = followups.map((f) => {
+      const dynamicSentCount = f.recipients.filter((r) => r.status !== "pending").length;
+      return {
+        ...f,
+        sentCount: dynamicSentCount,
+        recipients: undefined, // Jangan expose detail recipients di list
+      };
+    });
+
+    return NextResponse.json({ followups: followupsWithCount });
   } catch (error) {
     return NextResponse.json({ error: String(error) }, { status: 500 });
   }
