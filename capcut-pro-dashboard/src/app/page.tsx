@@ -247,8 +247,31 @@ export default function DashboardPage() {
           </div>
         ) : (
           <>
-            {/* ── Stat Cards ── */}
-            <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
+            {/* ── Stat Cards: Mobile = 1 compact card | Desktop = 4-col grid ── */}
+
+            {/* Mobile compact card */}
+            <div className="glass-card p-4 flex items-center gap-3 flex-wrap md:hidden">
+              {stats.map((stat, i) => (
+                <div key={stat.label} className="contents">
+                  {i > 0 && <div className="w-px h-8 bg-[var(--border-color)] flex-shrink-0" />}
+                  <div className="flex items-center gap-2.5 flex-1 min-w-[110px]">
+                    <div
+                      className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
+                      style={{ background: stat.bg }}
+                    >
+                      <stat.icon size={15} style={{ color: stat.color }} />
+                    </div>
+                    <div>
+                      <p className="text-base font-bold text-white leading-none">{stat.value}</p>
+                      <p className="text-[10px] text-[var(--text-muted)] mt-0.5 leading-none">{stat.label}</p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Desktop 4-col grid */}
+            <div className="hidden md:grid grid-cols-2 xl:grid-cols-4 gap-4">
               {stats.map((stat) => (
                 <div
                   key={stat.label}
@@ -281,22 +304,24 @@ export default function DashboardPage() {
                     Penjualan, omset, dan penambahan pelanggan
                   </p>
                 </div>
-                {/* Range pills */}
-                <div className="flex items-center gap-1 p-1 rounded-xl" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.06)" }}>
-                  {RANGES.map((r) => (
-                    <button
-                      key={r.value}
-                      onClick={() => setRange(r.value)}
-                      className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
-                      style={{
-                        background: range === r.value ? "rgba(129,140,248,0.2)" : "transparent",
-                        color: range === r.value ? "#818cf8" : "var(--text-muted)",
-                        border: range === r.value ? "1px solid rgba(129,140,248,0.4)" : "1px solid transparent",
-                      }}
-                    >
-                      {r.label}
-                    </button>
-                  ))}
+                {/* Range pills — scrollable on mobile */}
+                <div className="filter-pills-scroll">
+                  <div className="flex items-center gap-1 p-1 rounded-xl flex-nowrap" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.06)" }}>
+                    {RANGES.map((r) => (
+                      <button
+                        key={r.value}
+                        onClick={() => setRange(r.value)}
+                        className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all flex-shrink-0"
+                        style={{
+                          background: range === r.value ? "rgba(129,140,248,0.2)" : "transparent",
+                          color: range === r.value ? "#818cf8" : "var(--text-muted)",
+                          border: range === r.value ? "1px solid rgba(129,140,248,0.4)" : "1px solid transparent",
+                        }}
+                      >
+                        {r.label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
 
@@ -307,7 +332,7 @@ export default function DashboardPage() {
                 </div>
               ) : (
                 <>
-                  {/* Summary badges */}
+                  {/* Summary badges — scrollable on mobile */}
                   {chartData?.summary && (
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
                       <div className="rounded-xl px-4 py-3" style={{ background: "rgba(99,102,241,0.08)", border: "1px solid rgba(99,102,241,0.15)" }}>
