@@ -19,6 +19,8 @@ import {
   Search,
   CheckCircle,
   Clock,
+  LayoutList,
+  LayoutGrid,
 } from "lucide-react";
 
 interface Recipient {
@@ -62,6 +64,7 @@ function FollowupPageInner() {
   const [statusFilter, setStatusFilter] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [importLoading, setImportLoading] = useState(false);
+  const [viewMode, setViewMode] = useState<"table" | "card">("table");
 
   // Form state
   const [formTitle, setFormTitle] = useState("");
@@ -103,7 +106,6 @@ function FollowupPageInner() {
       let fetchedUsers: UserItem[] = [];
 
       if (allUsers) {
-        // Kirim filter params ke API untuk fetch semua user sesuai kriteria
         const params = new URLSearchParams();
         params.set("allUsers", "1");
         const s = searchParams.get("search"); if (s) params.set("search", s);
@@ -113,7 +115,6 @@ function FollowupPageInner() {
         const data = await res.json();
         fetchedUsers = data.users || [];
       } else if (usersParam) {
-        // Fetch user spesifik berdasarkan IDs
         const res = await fetch(`/api/users?ids=${usersParam}`);
         const data = await res.json();
         fetchedUsers = data.users || [];
@@ -133,7 +134,6 @@ function FollowupPageInner() {
         setShowForm(true);
       }
 
-      // Bersihkan query params dari URL supaya tidak reload lagi
       router.replace("/followup");
     };
 
@@ -246,7 +246,7 @@ function FollowupPageInner() {
         </button>
       </Topbar>
 
-      <div className="px-8 pb-8 space-y-5">
+      <div className="px-4 md:px-8 pb-8 space-y-5">
         {/* Filter Pills */}
         <div className="filter-pills-scroll">
           <div className="filter-pills flex-nowrap">
@@ -265,7 +265,26 @@ function FollowupPageInner() {
           </div>
         </div>
 
-        {/* Table */}
+        {/* View Toggle (mobile) */}
+        <div className="flex items-center justify-between lg:hidden">
+          <p className="text-xs text-[var(--text-muted)]">Total {followups.length} jadwal</p>
+          <div className="flex gap-1">
+            <button
+              className={`view-toggle-btn ${viewMode === "table" ? "active" : ""}`}
+              onClick={() => setViewMode("table")}
+            >
+              <LayoutList size={13} /> Tabel
+            </button>
+            <button
+              className={`view-toggle-btn ${viewMode === "card" ? "active" : ""}`}
+              onClick={() => setViewMode("card")}
+            >
+              <LayoutGrid size={13} /> Card
+            </button>
+          </div>
+        </div>
+
+        {/* Table / Empty state / Loading */}
         {loading ? (
           <div className="flex items-center justify-center py-20">
             <Loader2 className="animate-spin text-[var(--accent-indigo)]" size={32} />
@@ -278,48 +297,151 @@ function FollowupPageInner() {
           </div>
         ) : (
           <div className="glass-card overflow-hidden">
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>Judul</th>
-                  <th>Dijadwalkan</th>
-                  <th>Penerima</th>
-                  <th>Progres</th>
-                  <th>Status</th>
-                  <th>Aksi</th>
-                </tr>
-              </thead>
-              <tbody>
+            {/* ── Table View ── */}
+            {viewMode === "table" && (
+              <div className="overflow-x-auto">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>Judul</th>
+                      <th>Dijadwalkan</th>
+                      <th>Penerima</th>
+                      <th>Progres</th>
+                      <th>Status</th>
+                      <th className="sticky-col-head">Aksi</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {followups.map((f) => {
+                      const total = f._count?.recipients || f.totalRecipients || 0;
+                      const sent = f.sentCount || 0;
+                      const pct = total ? Math.round((sent / total) * 100) : 0;
+                      return (
+                        <tr key={f.id}>
+                          <td className="font-medium text-white">{f.title}</td>
+                          <td className="text-sm">
+                            {new Date(f.scheduledAt).toLocaleDateString("id-ID", {
+                              day: "numeric", month: "short", year: "numeric",
+                              hour: "2-digit", minute: "2-digit",
+                            })}
+                          </td>
+                          <td>
+                            <span className="flex items-center gap-1.5 text-sm">
+                              <Users size={14} className="text-[var(--text-muted)]" />
+                              {total}
+                            </span>
+                          </td>
+                          <td>
+                            <div className="flex items-center gap-2.5">
+                              <div className="w-24 h-[6px] bg-[var(--bg-secondary)] rounded-full overflow-hidden">
+                                <div
+                                  className="h-full rounded-full transition-all duration-500"
+                                  style={{
+                                    width: `${pct}%`,
+                                    background: pct >= 100 ? "var(--success)" : "var(--accent-indigo, #818cf8)",
+                                  }}
+                                />
+                              </div>
+                              <span className="text-xs text-[var(--text-muted)] tabular-nums">{sent}/{total}</span>
+                            </div>
+                          </td>
+                          <td>{statusBadge(f.status || "pending")}</td>
+                          <td className="sticky-col-body">
+                            <div className="flex gap-1">
+                              <button onClick={() => handleViewDetail(f.id)} className="btn-icon" style={{ width: 32, height: 32 }} title="Lihat Detail">
+                                <Eye size={15} />
+                              </button>
+                              {f.status === "pending" && (
+                                <button onClick={() => handleCancel(f.id)} className="btn-icon" style={{ width: 32, height: 32 }} title="Batalkan">
+                                  <X size={15} />
+                                </button>
+                              )}
+                              {(f.status === "cancelled" || f.status === "completed") && (
+                                <button onClick={() => handleDelete(f.id)} className="btn-icon" style={{ width: 32, height: 32 }} title="Hapus">
+                                  <Trash2 size={15} />
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {/* ── Card View (mobile) ── */}
+            {viewMode === "card" && (
+              <div className="data-card-grid">
                 {followups.map((f) => {
                   const total = f._count?.recipients || f.totalRecipients || 0;
                   const sent = f.sentCount || 0;
                   const pct = total ? Math.round((sent / total) * 100) : 0;
                   return (
-                    <tr key={f.id}>
-                      <td className="font-medium text-white">{f.title}</td>
-                      <td className="text-sm">{new Date(f.scheduledAt).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}</td>
-                      <td><span className="flex items-center gap-1.5 text-sm"><Users size={14} className="text-[var(--text-muted)]" />{total}</span></td>
-                      <td>
-                        <div className="flex items-center gap-2.5">
-                          <div className="w-24 h-[6px] bg-[var(--bg-secondary)] rounded-full overflow-hidden">
-                            <div className="h-full rounded-full transition-all duration-500" style={{ width: `${pct}%`, background: pct >= 100 ? "var(--success)" : "var(--accent-indigo, #818cf8)" }} />
-                          </div>
-                          <span className="text-xs text-[var(--text-muted)] tabular-nums">{sent}/{total}</span>
+                    <div key={f.id} className="data-card">
+                      <div className="flex items-start justify-between mb-3">
+                        <p className="font-semibold text-white text-sm leading-tight flex-1 mr-2">{f.title}</p>
+                        {statusBadge(f.status || "pending")}
+                      </div>
+                      <div className="space-y-1.5 pt-2.5 border-t border-[rgba(99,102,241,0.08)]">
+                        <div className="data-card-row">
+                          <span className="data-card-label">Dijadwalkan</span>
+                          <span className="data-card-value text-xs">
+                            {new Date(f.scheduledAt).toLocaleDateString("id-ID", {
+                              day: "numeric", month: "short", year: "numeric",
+                              hour: "2-digit", minute: "2-digit",
+                            })}
+                          </span>
                         </div>
-                      </td>
-                      <td>{statusBadge(f.status || "pending")}</td>
-                      <td>
-                        <div className="flex gap-1">
-                          <button onClick={() => handleViewDetail(f.id)} className="btn-icon" style={{ width: 32, height: 32 }} title="Lihat Detail"><Eye size={15} /></button>
-                          {f.status === "pending" && <button onClick={() => handleCancel(f.id)} className="btn-icon" style={{ width: 32, height: 32 }} title="Batalkan"><X size={15} /></button>}
-                          {(f.status === "cancelled" || f.status === "completed") && <button onClick={() => handleDelete(f.id)} className="btn-icon" style={{ width: 32, height: 32 }} title="Hapus"><Trash2 size={15} /></button>}
+                        <div className="data-card-row">
+                          <span className="data-card-label">Penerima</span>
+                          <span className="data-card-value flex items-center gap-1">
+                            <Users size={12} className="text-[var(--text-muted)]" />
+                            {total}
+                          </span>
                         </div>
-                      </td>
-                    </tr>
+                        <div className="data-card-row">
+                          <span className="data-card-label">Progres</span>
+                          <span className="data-card-value flex items-center gap-2">
+                            <div className="w-16 h-[5px] bg-[var(--bg-secondary)] rounded-full overflow-hidden">
+                              <div
+                                className="h-full rounded-full"
+                                style={{
+                                  width: `${pct}%`,
+                                  background: pct >= 100 ? "var(--success)" : "#818cf8",
+                                }}
+                              />
+                            </div>
+                            <span className="text-xs tabular-nums">{sent}/{total}</span>
+                          </span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 mt-3 pt-2.5 border-t border-[rgba(99,102,241,0.08)]">
+                        <button onClick={() => handleViewDetail(f.id)} className="btn-icon" style={{ width: 30, height: 30 }} title="Lihat Detail">
+                          <Eye size={14} />
+                        </button>
+                        {f.status === "pending" && (
+                          <button onClick={() => handleCancel(f.id)} className="btn-icon" style={{ width: 30, height: 30 }} title="Batalkan">
+                            <X size={14} />
+                          </button>
+                        )}
+                        {(f.status === "cancelled" || f.status === "completed") && (
+                          <button onClick={() => handleDelete(f.id)} className="btn-icon" style={{ width: 30, height: 30 }} title="Hapus">
+                            <Trash2 size={14} />
+                          </button>
+                        )}
+                      </div>
+                    </div>
                   );
                 })}
-              </tbody>
-            </table>
+              </div>
+            )}
+
+            {/* Footer */}
+            <div className="flex items-center justify-between px-4 md:px-6 py-4 border-t border-[rgba(99,102,241,0.08)]">
+              <p className="text-sm text-[var(--text-muted)]">Total {followups.length} jadwal follow-up</p>
+            </div>
           </div>
         )}
       </div>
@@ -332,7 +454,10 @@ function FollowupPageInner() {
               <div>
                 <h3 className="text-lg font-semibold text-white">{showDetail.title}</h3>
                 <p className="text-xs text-[var(--text-muted)] mt-1">
-                  {new Date(showDetail.scheduledAt).toLocaleDateString("id-ID", { weekday: "long", day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" })}
+                  {new Date(showDetail.scheduledAt).toLocaleDateString("id-ID", {
+                    weekday: "long", day: "numeric", month: "long", year: "numeric",
+                    hour: "2-digit", minute: "2-digit",
+                  })}
                 </p>
               </div>
               <button className="btn-icon" onClick={() => setShowDetail(null)}><X size={18} /></button>
@@ -446,7 +571,7 @@ function FollowupPageInner() {
 
               {/* Tanggal */}
               <div>
-                <label className="form-label">Tanggal & Jam Kirim</label>
+                <label className="form-label">Tanggal &amp; Jam Kirim</label>
                 <input type="datetime-local" className="form-input" value={formDate} onChange={(e) => setFormDate(e.target.value)} />
               </div>
 
@@ -494,7 +619,7 @@ function FollowupPageInner() {
                   <div className="text-center py-8 rounded-xl" style={{ background: "var(--bg-secondary)", border: "1px dashed var(--border-color)" }}>
                     <Users size={24} className="mx-auto mb-2 text-[var(--text-muted)]" />
                     <p className="text-xs text-[var(--text-muted)]">Belum ada penerima.</p>
-                    <p className="text-[10px] text-[var(--text-muted)] mt-0.5">Ketik nama & nomor di atas, atau pilih dari daftar customer.</p>
+                    <p className="text-[10px] text-[var(--text-muted)] mt-0.5">Ketik nama &amp; nomor di atas, atau pilih dari daftar customer.</p>
                   </div>
                 )}
               </div>

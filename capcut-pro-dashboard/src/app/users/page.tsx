@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import Topbar from "@/components/Topbar";
 import { usePrivacy } from "@/context/PrivacyContext";
@@ -105,9 +106,9 @@ export default function UsersPage() {
 
   // Popover assign tag
   const [tagPopoverUserId, setTagPopoverUserId] = useState<string | null>(null);
+  const [tagPopoverPos, setTagPopoverPos] = useState<{ top: number; right: number } | null>(null);
   const [togglingTag, setTogglingTag] = useState<string | null>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
-  const popoverContainerRef = useRef<HTMLDivElement>(null);
 
   // Selection state
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -163,18 +164,21 @@ export default function UsersPage() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  // Close popover on outside click
+  // Close popover on outside click or scroll
   useEffect(() => {
+    if (!tagPopoverUserId) return;
+    const close = () => { setTagPopoverUserId(null); setTagPopoverPos(null); };
     const handler = (e: MouseEvent) => {
-      if (
-        popoverContainerRef.current &&
-        !popoverContainerRef.current.contains(e.target as Node)
-      ) {
-        setTagPopoverUserId(null);
+      if (popoverRef.current && !popoverRef.current.contains(e.target as Node)) {
+        close();
       }
     };
     document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
+    window.addEventListener("scroll", close, true);
+    return () => {
+      document.removeEventListener("mousedown", handler);
+      window.removeEventListener("scroll", close, true);
+    };
   }, [tagPopoverUserId]);
 
   // ─── Tag Manager ─────────────────────────────────────────────────────────────
@@ -527,87 +531,34 @@ export default function UsersPage() {
                                   </a>
                                 )}
 
-                                {/* Tombol assign tag — jelas & berlabel */}
-                                <div
-                                  className="relative"
-                                  ref={isPopoverOpen ? popoverContainerRef : null}
+                                {/* Tombol assign tag */}
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (isPopoverOpen) {
+                                      setTagPopoverUserId(null);
+                                      setTagPopoverPos(null);
+                                    } else {
+                                      const rect = e.currentTarget.getBoundingClientRect();
+                                      setTagPopoverPos({
+                                        top: rect.bottom + 8,
+                                        right: window.innerWidth - rect.right,
+                                      });
+                                      setTagPopoverUserId(user.id);
+                                    }
+                                  }}
+                                  className="flex items-center gap-1.5 px-2 py-1 rounded-lg text-xs font-medium transition-all"
+                                  style={{
+                                    height: 28,
+                                    background: isPopoverOpen ? "rgba(129,140,248,0.2)" : "rgba(129,140,248,0.08)",
+                                    border: "1px solid rgba(129,140,248,0.3)",
+                                    color: "#818cf8",
+                                  }}
+                                  title="Kelola tag pelanggan ini"
                                 >
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setTagPopoverUserId(isPopoverOpen ? null : user.id);
-                                    }}
-                                    className="flex items-center gap-1.5 px-2 py-1 rounded-lg text-xs font-medium transition-all"
-                                    style={{
-                                      height: 28,
-                                      background: isPopoverOpen ? "rgba(129,140,248,0.2)" : "rgba(129,140,248,0.08)",
-                                      border: "1px solid rgba(129,140,248,0.3)",
-                                      color: "#818cf8",
-                                    }}
-                                    title="Kelola tag pelanggan ini"
-                                  >
-                                    <Tag size={12} />
-                                    Tag
-                                  </button>
-
-                                  {/* Tag Popover */}
-                                  {isPopoverOpen && (
-                                    <div
-                                      ref={popoverRef}
-                                      className="absolute z-50 right-0 top-8 w-52 rounded-xl border border-[var(--border-color)] shadow-2xl overflow-hidden"
-                                      style={{ background: "rgba(15,17,30,0.97)", backdropFilter: "blur(16px)" }}
-                                      onClick={(e) => e.stopPropagation()}
-                                    >
-                                      <div className="px-3 py-2.5 border-b border-[var(--border-color)] flex items-center gap-2">
-                                        <Tag size={13} className="text-[#818cf8]" />
-                                        <p className="text-xs font-semibold text-white">Tag untuk {user.name.split(" ")[0]}</p>
-                                      </div>
-                                      {allTags.length === 0 ? (
-                                        <div className="px-3 py-4 text-xs text-[var(--text-muted)] text-center">
-                                          Belum ada tag.<br />
-                                          <button
-                                            onClick={() => { setShowTagManager(true); setTagPopoverUserId(null); }}
-                                            className="text-[#818cf8] underline mt-1.5 font-medium"
-                                          >
-                                            Buat tag dulu →
-                                          </button>
-                                        </div>
-                                      ) : (
-                                        <div className="py-1 max-h-52 overflow-y-auto">
-                                          {allTags.map((tag) => {
-                                            const has = userTagIds.has(tag.id);
-                                            const isToggling = togglingTag === tag.id;
-                                            return (
-                                              <button
-                                                key={tag.id}
-                                                onClick={() => toggleTagOnUser(user.id, tag.id, has)}
-                                                disabled={isToggling}
-                                                className="w-full flex items-center gap-2.5 px-3 py-2.5 text-sm hover:bg-white/5 transition-colors text-left"
-                                              >
-                                                <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ background: tag.color }} />
-                                                <span className="flex-1 text-[var(--text-secondary)]">{tag.name}</span>
-                                                {isToggling
-                                                  ? <Loader2 size={13} className="animate-spin text-[var(--text-muted)]" />
-                                                  : has
-                                                    ? <span className="flex items-center gap-1 text-[11px] font-semibold text-[#22c55e]"><Check size={11} /> Aktif</span>
-                                                    : <span className="text-[11px] text-[var(--text-muted)]">Tambah</span>
-                                                }
-                                              </button>
-                                            );
-                                          })}
-                                        </div>
-                                      )}
-                                      <div className="px-3 py-2 border-t border-[var(--border-color)]">
-                                        <button
-                                          onClick={() => { setShowTagManager(true); setTagPopoverUserId(null); }}
-                                          className="w-full text-xs text-[var(--text-muted)] hover:text-[#818cf8] transition-colors text-center"
-                                        >
-                                          + Buat tag baru
-                                        </button>
-                                      </div>
-                                    </div>
-                                  )}
-                                </div>
+                                  <Tag size={12} />
+                                  Tag
+                                </button>
                               </div>
                             </td>
                           </tr>
@@ -673,6 +624,81 @@ export default function UsersPage() {
           )}
         </div>
       </div>
+
+      {/* ── Tag Popover Portal (rendered outside overflow container) ── */}
+      {tagPopoverUserId && tagPopoverPos && typeof window !== 'undefined' && createPortal(
+        <div
+          ref={popoverRef}
+          className="w-52 rounded-xl border border-[var(--border-color)] shadow-2xl overflow-hidden"
+          style={{
+            position: 'fixed',
+            top: tagPopoverPos.top,
+            right: tagPopoverPos.right,
+            zIndex: 9999,
+            background: "rgba(15,17,30,0.97)",
+            backdropFilter: "blur(16px)",
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          {(() => {
+            const popUser = users.find(u => u.id === tagPopoverUserId);
+            if (!popUser) return null;
+            const popUserTagIds = new Set(popUser.tags?.map((t) => t.tag.id) || []);
+            return (
+              <>
+                <div className="px-3 py-2.5 border-b border-[var(--border-color)] flex items-center gap-2">
+                  <Tag size={13} className="text-[#818cf8]" />
+                  <p className="text-xs font-semibold text-white">Tag untuk {popUser.name.split(" ")[0]}</p>
+                </div>
+                {allTags.length === 0 ? (
+                  <div className="px-3 py-4 text-xs text-[var(--text-muted)] text-center">
+                    Belum ada tag.<br />
+                    <button
+                      onClick={() => { setShowTagManager(true); setTagPopoverUserId(null); setTagPopoverPos(null); }}
+                      className="text-[#818cf8] underline mt-1.5 font-medium"
+                    >
+                      Buat tag dulu →
+                    </button>
+                  </div>
+                ) : (
+                  <div className="py-1 max-h-52 overflow-y-auto">
+                    {allTags.map((tag) => {
+                      const has = popUserTagIds.has(tag.id);
+                      const isToggling = togglingTag === tag.id;
+                      return (
+                        <button
+                          key={tag.id}
+                          onClick={() => toggleTagOnUser(popUser.id, tag.id, has)}
+                          disabled={isToggling}
+                          className="w-full flex items-center gap-2.5 px-3 py-2.5 text-sm hover:bg-white/5 transition-colors text-left"
+                        >
+                          <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ background: tag.color }} />
+                          <span className="flex-1 text-[var(--text-secondary)]">{tag.name}</span>
+                          {isToggling
+                            ? <Loader2 size={13} className="animate-spin text-[var(--text-muted)]" />
+                            : has
+                              ? <span className="flex items-center gap-1 text-[11px] font-semibold text-[#22c55e]"><Check size={11} /> Aktif</span>
+                              : <span className="text-[11px] text-[var(--text-muted)]">Tambah</span>
+                          }
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+                <div className="px-3 py-2 border-t border-[var(--border-color)]">
+                  <button
+                    onClick={() => { setShowTagManager(true); setTagPopoverUserId(null); setTagPopoverPos(null); }}
+                    className="w-full text-xs text-[var(--text-muted)] hover:text-[#818cf8] transition-colors text-center"
+                  >
+                    + Buat tag baru
+                  </button>
+                </div>
+              </>
+            );
+          })()}
+        </div>,
+        document.body
+      )}
 
       {/* ── Floating Action Bar ── */}
       <div

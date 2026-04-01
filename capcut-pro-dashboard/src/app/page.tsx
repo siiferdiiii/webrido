@@ -249,22 +249,19 @@ export default function DashboardPage() {
           <>
             {/* ── Stat Cards: Mobile = 1 compact card | Desktop = 4-col grid ── */}
 
-            {/* Mobile compact card */}
-            <div className="glass-card p-4 flex items-center gap-3 flex-wrap md:hidden">
-              {stats.map((stat, i) => (
-                <div key={stat.label} className="contents">
-                  {i > 0 && <div className="w-px h-8 bg-[var(--border-color)] flex-shrink-0" />}
-                  <div className="flex items-center gap-2.5 flex-1 min-w-[110px]">
-                    <div
-                      className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
-                      style={{ background: stat.bg }}
-                    >
-                      <stat.icon size={15} style={{ color: stat.color }} />
-                    </div>
-                    <div>
-                      <p className="text-base font-bold text-white leading-none">{stat.value}</p>
-                      <p className="text-[10px] text-[var(--text-muted)] mt-0.5 leading-none">{stat.label}</p>
-                    </div>
+            {/* Mobile compact card — 2×2 grid */}
+            <div className="glass-card p-4 grid grid-cols-2 gap-x-4 gap-y-3 md:hidden">
+              {stats.map((stat) => (
+                <div key={stat.label} className="flex items-center gap-2.5">
+                  <div
+                    className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
+                    style={{ background: stat.bg }}
+                  >
+                    <stat.icon size={15} style={{ color: stat.color }} />
+                  </div>
+                  <div>
+                    <p className="text-sm font-bold text-white leading-none">{stat.value}</p>
+                    <p className="text-[10px] text-[var(--text-muted)] mt-0.5 leading-none">{stat.label}</p>
                   </div>
                 </div>
               ))}
@@ -332,9 +329,36 @@ export default function DashboardPage() {
                 </div>
               ) : (
                 <>
-                  {/* Summary badges — scrollable on mobile */}
+                  {/* Summary badges — horizontal compact row on mobile */}
                   {chartData?.summary && (
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+                    <>
+                      {/* Mobile: single compact row */}
+                      <div className="flex items-center gap-2 mb-4 md:hidden">
+                        <div className="flex-1 rounded-xl px-3 py-2" style={{ background: "rgba(99,102,241,0.08)", border: "1px solid rgba(99,102,241,0.15)" }}>
+                          <div className="flex items-center gap-1.5 mb-0.5">
+                            <ShoppingCart size={11} style={{ color: "#818cf8" }} />
+                            <span className="text-[10px] text-[var(--text-muted)]">Penjualan</span>
+                          </div>
+                          <p className="text-sm font-bold text-white">{chartData.summary.totalPenjualan.toLocaleString("id-ID")}</p>
+                        </div>
+                        <div className="flex-1 rounded-xl px-3 py-2" style={{ background: "rgba(16,185,129,0.08)", border: "1px solid rgba(16,185,129,0.15)" }}>
+                          <div className="flex items-center gap-1.5 mb-0.5">
+                            <DollarSign size={11} style={{ color: "#34d399" }} />
+                            <span className="text-[10px] text-[var(--text-muted)]">Omset</span>
+                          </div>
+                          <p className="text-sm font-bold text-white">{formatCurrencyShort(chartData.summary.totalOmset)}</p>
+                        </div>
+                        <div className="flex-1 rounded-xl px-3 py-2" style={{ background: "rgba(34,211,238,0.08)", border: "1px solid rgba(34,211,238,0.15)" }}>
+                          <div className="flex items-center gap-1.5 mb-0.5">
+                            <UserPlus size={11} style={{ color: "#22d3ee" }} />
+                            <span className="text-[10px] text-[var(--text-muted)]">User Baru</span>
+                          </div>
+                          <p className="text-sm font-bold text-white">{chartData.summary.totalNewUser.toLocaleString("id-ID")}</p>
+                        </div>
+                      </div>
+
+                      {/* Desktop: vertical cards */}
+                      <div className="hidden md:grid grid-cols-3 gap-4 mb-6">
                       <div className="rounded-xl px-4 py-3" style={{ background: "rgba(99,102,241,0.08)", border: "1px solid rgba(99,102,241,0.15)" }}>
                         <div className="flex items-center gap-2 mb-1">
                           <ShoppingCart size={13} style={{ color: "#818cf8" }} />
@@ -359,7 +383,8 @@ export default function DashboardPage() {
                         <p className="text-xl font-bold text-white">{chartData.summary.totalNewUser.toLocaleString("id-ID")}</p>
                         <p className="text-xs text-[var(--text-muted)]">pelanggan bergabung</p>
                       </div>
-                    </div>
+                      </div>
+                    </>
                   )}
 
                   {/* ── Chart 1: Grafik Penjualan (Bar) ── */}
