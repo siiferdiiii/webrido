@@ -33,7 +33,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
       // Update sent_count di followup
       const sentCount = await prisma.scheduledFollowupRecipient.count({
-        where: { followupId: id, status: "sent" },
+        where: { followupId: id, status: { not: "pending" } },
       });
       const totalRecipients = await prisma.scheduledFollowupRecipient.count({
         where: { followupId: id },

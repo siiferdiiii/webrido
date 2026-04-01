@@ -25,19 +25,19 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Penerima tidak ditemukan" }, { status: 404 });
     }
 
-    // 2. Jika status adalah 'sent', kita hitung dan perbarui sentCount di tabel Followup induk
-    if (status === "sent" && recipient.followupId) {
+    // 2. Jika status adalah 'sent' atau 'failed', kita hitung dan perbarui sentCount di tabel Followup induk
+    if (recipient.followupId) {
       const parentId = recipient.followupId;
       
-      // Hitung berapa penerima yang sudah "sent"
+      // Hitung berapa penerima yang sudah diproses (bukan pending)
       const sentCount = await prisma.scheduledFollowupRecipient.count({
         where: { 
           followupId: parentId,
-          status: "sent"
+          status: { not: "pending" }
         }
       });
 
-      // Update parent sentCount. Jika semua sudah terkirim, update status parent ke "completed"
+      // Update parent sentCount. Jika semua sudah diproses, update status parent ke "completed"
       const parent = recipient.followup;
       const totalRecipients = parent?.totalRecipients || 0;
       
