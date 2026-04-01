@@ -248,19 +248,21 @@ function FollowupPageInner() {
 
       <div className="px-8 pb-8 space-y-5">
         {/* Filter Pills */}
-        <div className="filter-pills">
-          {[
-            { val: "", label: "Semua" },
-            { val: "pending", label: "Menunggu" },
-            { val: "processing", label: "Berjalan" },
-            { val: "completed", label: "Selesai" },
-            { val: "cancelled", label: "Dibatalkan" },
-          ].map((s) => (
-            <button key={s.val} onClick={() => setStatusFilter(s.val)}
-              className={`filter-pill ${statusFilter === s.val ? "active" : ""}`}>
-              {s.label}
-            </button>
-          ))}
+        <div className="filter-pills-scroll">
+          <div className="filter-pills flex-nowrap">
+            {[
+              { val: "", label: "Semua" },
+              { val: "pending", label: "Menunggu" },
+              { val: "processing", label: "Berjalan" },
+              { val: "completed", label: "Selesai" },
+              { val: "cancelled", label: "Dibatalkan" },
+            ].map((s) => (
+              <button key={s.val} onClick={() => setStatusFilter(s.val)}
+                className={`filter-pill flex-shrink-0 ${statusFilter === s.val ? "active" : ""}`}>
+                {s.label}
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* Table */}

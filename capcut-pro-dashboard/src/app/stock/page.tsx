@@ -147,8 +147,39 @@ export default function StockPage() {
       <Topbar title="Stok Akun" subtitle="Kelola stok akun CapCut Pro (Sharing Account)" />
 
       <div className="px-4 md:px-8 pb-8 space-y-5">
-        {/* Mini Stats */}
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-3 max-w-4xl">
+        {/* Mini Stats — Desktop: 5 cols grid | Mobile: 1 summary card */}
+        {/* Mobile summary card */}
+        <div className="glass-card p-4 flex items-center gap-3 flex-wrap md:hidden">
+          <div className="flex items-center gap-2 flex-1 min-w-[100px]">
+            <span className="text-xs text-[var(--text-muted)]">Tersedia:</span>
+            <span className="text-base font-bold text-emerald-400">{sc.available || 0}</span>
+          </div>
+          <div className="w-px h-4 bg-[var(--border-color)]" />
+          <div className="flex items-center gap-2 flex-1 min-w-[100px]">
+            <span className="text-xs text-[var(--text-muted)]">Digunakan:</span>
+            <span className="text-base font-bold text-cyan-400">{sc.in_use || 0}</span>
+          </div>
+          <div className="w-px h-4 bg-[var(--border-color)]" />
+          <div className="flex items-center gap-2 flex-1 min-w-[100px]">
+            <span className="text-xs text-[var(--text-muted)]">Sold:</span>
+            <span className="text-base font-bold text-slate-400">{sc.sold || 0}</span>
+          </div>
+          <div className="w-full h-px bg-[var(--border-color)]" />
+          <div className="flex items-center gap-2 flex-1 min-w-[100px]">
+            <Smartphone size={13} className="text-green-400 flex-shrink-0" />
+            <span className="text-xs text-[var(--text-muted)]">Slot Mobile:</span>
+            <span className="text-base font-bold text-green-400">{remainingSlotsMobile}</span>
+          </div>
+          <div className="w-px h-4 bg-[var(--border-color)]" />
+          <div className="flex items-center gap-2 flex-1 min-w-[100px]">
+            <Monitor size={13} className="text-blue-400 flex-shrink-0" />
+            <span className="text-xs text-[var(--text-muted)]">Slot Desktop:</span>
+            <span className="text-base font-bold text-blue-400">{remainingSlotsDesktop}</span>
+          </div>
+        </div>
+
+        {/* Desktop 5-col grid */}
+        <div className="hidden md:grid grid-cols-5 gap-3 max-w-4xl">
           <div className="glass-card p-4 text-center">
             <p className="text-2xl font-bold text-emerald-400">{sc.available || 0}</p>
             <p className="text-xs text-[var(--text-muted)] mt-1">Tersedia</p>
@@ -179,17 +210,19 @@ export default function StockPage() {
 
         {/* Actions */}
         <div className="flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center gap-3 flex-1">
+          <div className="flex items-center gap-3 flex-1 min-w-0">
             <div className="search-box flex-1 max-w-md">
               <Search size={16} className="search-icon" />
               <input type="text" placeholder="Cari email akun..." className="form-input !pl-10" value={search} onChange={(e) => setSearch(e.target.value)} />
             </div>
-            <div className="filter-pills">
-              {statusFilters.map((f) => (
-                <button key={f} className={`filter-pill ${statusFilter === f ? "active" : ""}`} onClick={() => setStatusFilter(f)}>
-                  {statusLabels[f]}
-                </button>
-              ))}
+            <div className="filter-pills-scroll">
+              <div className="filter-pills flex-nowrap">
+                {statusFilters.map((f) => (
+                  <button key={f} className={`filter-pill flex-shrink-0 ${statusFilter === f ? "active" : ""}`} onClick={() => setStatusFilter(f)}>
+                    {statusLabels[f]}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
           <div className="flex gap-2">

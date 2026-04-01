@@ -107,6 +107,7 @@ export default function UsersPage() {
   const [tagPopoverUserId, setTagPopoverUserId] = useState<string | null>(null);
   const [togglingTag, setTogglingTag] = useState<string | null>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
+  const popoverContainerRef = useRef<HTMLDivElement>(null);
 
   // Selection state
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -165,13 +166,16 @@ export default function UsersPage() {
   // Close popover on outside click
   useEffect(() => {
     const handler = (e: MouseEvent) => {
-      if (popoverRef.current && !popoverRef.current.contains(e.target as Node)) {
+      if (
+        popoverContainerRef.current &&
+        !popoverContainerRef.current.contains(e.target as Node)
+      ) {
         setTagPopoverUserId(null);
       }
     };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
-  }, []);
+  }, [tagPopoverUserId]);
 
   // ─── Tag Manager ─────────────────────────────────────────────────────────────
 
@@ -343,40 +347,42 @@ export default function UsersPage() {
         </div>
 
         {/* ── Filter Pills: Base + Custom Tags ── */}
-        <div className="filter-pills flex-wrap gap-y-2">
-          {BASE_FILTERS.map((f) => (
-            <button
-              key={f}
-              className={`filter-pill ${filter === f && !activeTagId ? "active" : ""}`}
-              onClick={() => { setFilter(f); setActiveTagId(null); }}
-            >
-              {f}
-            </button>
-          ))}
-          {allTags.length > 0 && (
-            <div className="w-px h-5 bg-[var(--border-color)] self-center mx-1" />
-          )}
-          {allTags.map((tag) => (
-            <button
-              key={tag.id}
-              onClick={() => {
-                if (activeTagId === tag.id) { setActiveTagId(null); setFilter("Semua"); }
-                else { setActiveTagId(tag.id); setFilter("Semua"); }
-              }}
-              style={{
-                borderColor: activeTagId === tag.id ? tag.color : undefined,
-                background: activeTagId === tag.id ? `${tag.color}22` : undefined,
-                color: activeTagId === tag.id ? tag.color : undefined,
-              }}
-              className={`filter-pill flex items-center gap-1.5 ${activeTagId === tag.id ? "" : ""}`}
-            >
-              <span
-                className="inline-block w-2 h-2 rounded-full flex-shrink-0"
-                style={{ background: tag.color }}
-              />
-              {tag.name}
-            </button>
-          ))}
+        <div className="filter-pills-scroll">
+          <div className="filter-pills flex-nowrap">
+            {BASE_FILTERS.map((f) => (
+              <button
+                key={f}
+                className={`filter-pill flex-shrink-0 ${filter === f && !activeTagId ? "active" : ""}`}
+                onClick={() => { setFilter(f); setActiveTagId(null); }}
+              >
+                {f}
+              </button>
+            ))}
+            {allTags.length > 0 && (
+              <div className="w-px h-5 bg-[var(--border-color)] self-center mx-1 flex-shrink-0" />
+            )}
+            {allTags.map((tag) => (
+              <button
+                key={tag.id}
+                onClick={() => {
+                  if (activeTagId === tag.id) { setActiveTagId(null); setFilter("Semua"); }
+                  else { setActiveTagId(tag.id); setFilter("Semua"); }
+                }}
+                style={{
+                  borderColor: activeTagId === tag.id ? tag.color : undefined,
+                  background: activeTagId === tag.id ? `${tag.color}22` : undefined,
+                  color: activeTagId === tag.id ? tag.color : undefined,
+                }}
+                className="filter-pill flex items-center gap-1.5 flex-shrink-0"
+              >
+                <span
+                  className="inline-block w-2 h-2 rounded-full flex-shrink-0"
+                  style={{ background: tag.color }}
+                />
+                {tag.name}
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* View Toggle mobile */}
@@ -522,7 +528,10 @@ export default function UsersPage() {
                                 )}
 
                                 {/* Tombol assign tag — jelas & berlabel */}
-                                <div className="relative" ref={isPopoverOpen ? popoverRef : null}>
+                                <div
+                                  className="relative"
+                                  ref={isPopoverOpen ? popoverContainerRef : null}
+                                >
                                   <button
                                     onClick={(e) => {
                                       e.stopPropagation();
@@ -544,6 +553,7 @@ export default function UsersPage() {
                                   {/* Tag Popover */}
                                   {isPopoverOpen && (
                                     <div
+                                      ref={popoverRef}
                                       className="absolute z-50 right-0 top-8 w-52 rounded-xl border border-[var(--border-color)] shadow-2xl overflow-hidden"
                                       style={{ background: "rgba(15,17,30,0.97)", backdropFilter: "blur(16px)" }}
                                       onClick={(e) => e.stopPropagation()}

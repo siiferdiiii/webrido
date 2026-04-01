@@ -388,6 +388,18 @@ body {
 }
 
 /* Tabs / Filter Pills */
+/* Scrollable wrapper — prevents pills from wrapping on mobile */
+.filter-pills-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  /* hide scrollbar visually but keep functionality */
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.filter-pills-scroll::-webkit-scrollbar {
+  display: none;
+}
+
 .filter-pills {
   display: flex;
   gap: 6px;

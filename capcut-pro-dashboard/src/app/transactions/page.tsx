@@ -221,29 +221,34 @@ export default function TransactionsPage() {
 
       <div className="px-4 md:px-8 pb-8 space-y-5">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="flex flex-wrap items-center gap-3 flex-1">
-            <div className="search-box flex-1 max-w-xs">
-              <Search size={16} className="search-icon" />
-              <input type="text" placeholder="Cari nama, email, ID..." className="form-input !pl-10 text-sm" value={search} onChange={(e) => setSearch(e.target.value)} />
+          <div className="flex flex-col gap-3 flex-1 min-w-0">
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="search-box flex-1 min-w-[160px] max-w-xs">
+                <Search size={16} className="search-icon" />
+                <input type="text" placeholder="Cari nama, email, ID..." className="form-input !pl-10 text-sm" value={search} onChange={(e) => setSearch(e.target.value)} />
+              </div>
+              <div className="flex items-center gap-2 bg-[var(--bg-card)] border border-[var(--border-color)] rounded-xl px-3 py-1.5 h-[38px] flex-shrink-0">
+                <CalendarDays size={14} className="text-[var(--text-muted)]" />
+                <input type="date" className="bg-transparent text-sm text-[var(--text-secondary)] outline-none w-[110px]" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+                <span className="text-[var(--text-muted)] text-sm">-</span>
+                <input type="date" className="bg-transparent text-sm text-[var(--text-secondary)] outline-none w-[110px]" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+              </div>
             </div>
-            
-            <div className="flex items-center gap-2 bg-[var(--bg-card)] border border-[var(--border-color)] rounded-xl px-3 py-1.5 h-[38px]">
-              <CalendarDays size={14} className="text-[var(--text-muted)]" />
-              <input type="date" className="bg-transparent text-sm text-[var(--text-secondary)] outline-none w-[110px]" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
-              <span className="text-[var(--text-muted)] text-sm">-</span>
-              <input type="date" className="bg-transparent text-sm text-[var(--text-secondary)] outline-none w-[110px]" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
-            </div>
-            
-            <div className="filter-pills">
-              {sourceFilters.map((f) => (
-                <button key={f} className={`filter-pill ${sourceFilter === f ? "active" : ""}`} onClick={() => setSourceFilter(f)}>{sourceLabels[f]}</button>
-              ))}
-            </div>
-
-            <div className="filter-pills">
-              {statusFilters.map((f) => (
-                <button key={f} className={`filter-pill ${statusFilter === f ? "active" : ""}`} onClick={() => setStatusFilter(f)}>{statusLabels[f]}</button>
-              ))}
+            <div className="flex flex-wrap gap-3">
+              <div className="filter-pills-scroll">
+                <div className="filter-pills flex-nowrap">
+                  {sourceFilters.map((f) => (
+                    <button key={f} className={`filter-pill flex-shrink-0 ${sourceFilter === f ? "active" : ""}`} onClick={() => setSourceFilter(f)}>{sourceLabels[f]}</button>
+                  ))}
+                </div>
+              </div>
+              <div className="filter-pills-scroll">
+                <div className="filter-pills flex-nowrap">
+                  {statusFilters.map((f) => (
+                    <button key={f} className={`filter-pill flex-shrink-0 ${statusFilter === f ? "active" : ""}`} onClick={() => setStatusFilter(f)}>{statusLabels[f]}</button>
+                  ))}
+                </div>
+              </div>
             </div>
           </div>
           <div className="flex gap-2 flex-shrink-0">

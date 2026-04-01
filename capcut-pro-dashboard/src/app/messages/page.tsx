@@ -97,10 +97,12 @@ export default function MessagesPage() {
             <Search size={16} className="search-icon" />
             <input type="text" placeholder="Cari nama atau nomor WA..." className="form-input !pl-10" value={search} onChange={(e) => setSearch(e.target.value)} />
           </div>
-          <div className="filter-pills">
-            {typeFilterOptions.map((f) => (
-              <button key={f} className={`filter-pill ${typeFilter === f ? "active" : ""}`} onClick={() => setTypeFilter(f)}>{f}</button>
-            ))}
+          <div className="filter-pills-scroll">
+            <div className="filter-pills flex-nowrap">
+              {typeFilterOptions.map((f) => (
+                <button key={f} className={`filter-pill flex-shrink-0 ${typeFilter === f ? "active" : ""}`} onClick={() => setTypeFilter(f)}>{f}</button>
+              ))}
+            </div>
           </div>
         </div>
 

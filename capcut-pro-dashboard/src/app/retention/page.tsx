@@ -233,58 +233,62 @@ export default function RetentionPage() {
 
         {/* ── Filter Label / Tag ────────────────────────────────────────────── */}
         {allTags.length > 0 && (
-          <div className="glass-card px-4 py-3 flex items-center gap-3 flex-wrap">
+          <div className="glass-card px-4 py-3 flex items-center gap-3">
             <div className="flex items-center gap-1.5 text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider flex-shrink-0">
               <Tag size={13} />
               Filter Label
             </div>
             <div className="w-px h-4 bg-[var(--border-color)] flex-shrink-0" />
-            <div className="filter-pills flex-wrap gap-y-2">
-              <button
-                className={`filter-pill ${!activeTagId ? "active" : ""}`}
-                onClick={() => setActiveTagId(null)}
-              >
-                Semua Label
-              </button>
-              {allTags.map((tag) => (
+            <div className="filter-pills-scroll flex-1">
+              <div className="filter-pills flex-nowrap">
                 <button
-                  key={tag.id}
-                  onClick={() => setActiveTagId(activeTagId === tag.id ? null : tag.id)}
-                  style={{
-                    borderColor: activeTagId === tag.id ? tag.color : undefined,
-                    background: activeTagId === tag.id ? `${tag.color}22` : undefined,
-                    color: activeTagId === tag.id ? tag.color : undefined,
-                  }}
-                  className="filter-pill flex items-center gap-1.5"
+                  className={`filter-pill flex-shrink-0 ${!activeTagId ? "active" : ""}`}
+                  onClick={() => setActiveTagId(null)}
                 >
-                  <span
-                    className="inline-block w-2 h-2 rounded-full flex-shrink-0"
-                    style={{ background: tag.color }}
-                  />
-                  {tag.name}
+                  Semua Label
                 </button>
-              ))}
+                {allTags.map((tag) => (
+                  <button
+                    key={tag.id}
+                    onClick={() => setActiveTagId(activeTagId === tag.id ? null : tag.id)}
+                    style={{
+                      borderColor: activeTagId === tag.id ? tag.color : undefined,
+                      background: activeTagId === tag.id ? `${tag.color}22` : undefined,
+                      color: activeTagId === tag.id ? tag.color : undefined,
+                    }}
+                    className="filter-pill flex items-center gap-1.5 flex-shrink-0"
+                  >
+                    <span
+                      className="inline-block w-2 h-2 rounded-full flex-shrink-0"
+                      style={{ background: tag.color }}
+                    />
+                    {tag.name}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
         )}
 
         {/* Actions */}
         <div className="flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center gap-3 flex-1">
+          <div className="flex items-center gap-3 flex-1 min-w-0">
             <div className="search-box flex-1 max-w-sm">
               <Search size={16} className="search-icon" />
               <input type="text" placeholder="Cari pelanggan..." className="form-input !pl-10 text-sm" value={search} onChange={(e) => setSearch(e.target.value)} />
             </div>
-            <div className="filter-pills">
-              {[
-                { val: "", label: "Semua" },
-                { val: "retained", label: "Sudah Repeat" },
-                { val: "churned", label: "Belum Repeat" },
-              ].map((s) => (
-                <button key={s.val} className={`filter-pill ${statusFilter === s.val ? "active" : ""}`} onClick={() => setStatusFilter(s.val)}>
-                  {s.label}
-                </button>
-              ))}
+            <div className="filter-pills-scroll">
+              <div className="filter-pills flex-nowrap">
+                {[
+                  { val: "", label: "Semua" },
+                  { val: "retained", label: "Sudah Repeat" },
+                  { val: "churned", label: "Belum Repeat" },
+                ].map((s) => (
+                  <button key={s.val} className={`filter-pill flex-shrink-0 ${statusFilter === s.val ? "active" : ""}`} onClick={() => setStatusFilter(s.val)}>
+                    {s.label}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
           <button onClick={handleExportCSV} disabled={filteredCustomers.length === 0}
