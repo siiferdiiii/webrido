@@ -3,8 +3,6 @@
 import { useState, useEffect, useCallback } from "react";
 import * as XLSX from "xlsx";
 import Topbar from "@/components/Topbar";
-import LiveIndicator from "@/components/LiveIndicator";
-import { useAutoRefresh } from "@/hooks/useAutoRefresh";
 import { usePrivacy } from "@/context/PrivacyContext";
 import {
   Plus,
@@ -123,9 +121,6 @@ export default function TransactionsPage() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  // Auto-refresh every 15 seconds
-  const { secondsAgo, isRefreshing, refresh } = useAutoRefresh(fetchData, { intervalMs: 15000 });
-
   // Reset page to 1 when filters/search change
   useEffect(() => { setPage(1); }, [search, statusFilter, sourceFilter, startDate, endDate]);
 
@@ -222,9 +217,7 @@ export default function TransactionsPage() {
 
   return (
     <>
-      <Topbar title="Transaksi" subtitle="Kelola transaksi penjualan CapCut Pro">
-        <LiveIndicator secondsAgo={secondsAgo} isRefreshing={isRefreshing} onRefresh={refresh} intervalLabel="15 dtk" />
-      </Topbar>
+      <Topbar title="Transaksi" subtitle="Kelola transaksi penjualan CapCut Pro" />
 
       <div className="px-4 md:px-8 pb-8 space-y-5">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
