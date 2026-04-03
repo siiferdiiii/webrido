@@ -476,9 +476,6 @@ export default function UsersPage() {
                             {/* Tipe */}
                             <td>{getTypeBadge(user.customerType)}</td>
 
-                            {/* Status */}
-                            <td>{getStatusBadge(user.subscriptionStatus)}</td>
-
                             {/* Tag Column — display only, badge berwarna */}
                             <td>
                               <div className="flex items-center gap-1 flex-wrap" style={{ minWidth: 100 }}>
@@ -512,6 +509,9 @@ export default function UsersPage() {
                             <td className="text-sm text-[var(--text-secondary)]">
                               {user.transactions[0] ? formatDate(user.transactions[0].purchaseDate) : "-"}
                             </td>
+
+                            {/* Status */}
+                            <td>{getStatusBadge(user.subscriptionStatus)}</td>
 
                             {/* Aksi */}
                             <td className="sticky-col-body">
