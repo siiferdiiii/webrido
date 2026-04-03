@@ -1,6 +1,9 @@
 import { prisma } from "@/lib/db";
 import { NextRequest, NextResponse } from "next/server";
 
+export const maxDuration = 60; // 60 detik (Vercel Pro) atau 10 detik (Hobby)
+export const dynamic = "force-dynamic";
+
 // Mapping kolom Lynk.id ke database kita
 interface LynkTransaction {
   id?: string;
@@ -165,7 +168,7 @@ export async function POST(req: NextRequest) {
     }
 
     // ===== STEP 3: Batch upsert users & create transactions in chunks =====
-    const CHUNK_SIZE = 25;
+    const CHUNK_SIZE = 10; // Lebih kecil agar tidak timeout per-chunk
 
     for (let i = 0; i < newRows.length; i += CHUNK_SIZE) {
       const chunk = newRows.slice(i, i + CHUNK_SIZE);
@@ -229,9 +232,12 @@ export async function POST(req: NextRequest) {
           }
         }
       }, {
-        maxWait: 5000, // 5 seconds max wait to connect to prisma
-        timeout: 15000 // 15 seconds for the transaction to complete
+        maxWait: 5000,
+        timeout: 20000
       });
+
+      // Yield CPU sedikit antar chunk agar tidak blocking
+      await new Promise(resolve => setTimeout(resolve, 10));
     }
 
     return NextResponse.json({

@@ -100,6 +100,7 @@ export default function TransactionsPage() {
   const [importing, setImporting] = useState(false);
   const [importResult, setImportResult] = useState<{ success: boolean; summary: { total: number; created: number; skipped: number; usersCreated: number; usersUpdated: number; errors: string[] } } | null>(null);
   const [importFile, setImportFile] = useState<File | null>(null);
+  const [importProgress, setImportProgress] = useState<{ current: number; total: number; batches: number; currentBatch: number } | null>(null);
 
   const fetchData = useCallback(() => {
     setLoading(true);
@@ -158,6 +159,44 @@ export default function TransactionsPage() {
     setShowImportModal(false);
     setImportFile(null);
     setImportResult(null);
+    setImportProgress(null);
+  }
+
+  /** RFC-4180 CSV parser — handles quoted fields with commas/newlines */
+  function parseCSV(text: string): Record<string, string>[] {
+    const rows: string[][] = [];
+    let row: string[] = [];
+    let field = "";
+    let inQuotes = false;
+    let i = 0;
+    // Normalize line endings
+    const s = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+
+    while (i < s.length) {
+      const ch = s[i];
+      if (inQuotes) {
+        if (ch === '"') {
+          if (s[i + 1] === '"') { field += '"'; i += 2; continue; } // escaped quote
+          inQuotes = false; i++; continue;
+        }
+        field += ch; i++; continue;
+      }
+      if (ch === '"') { inQuotes = true; i++; continue; }
+      if (ch === ',') { row.push(field); field = ""; i++; continue; }
+      if (ch === '\n') { row.push(field); rows.push(row); row = []; field = ""; i++; continue; }
+      field += ch; i++;
+    }
+    // Last field & row
+    row.push(field);
+    if (row.some(f => f !== "")) rows.push(row);
+
+    if (rows.length < 2) return [];
+    const headers = rows[0].map(h => h.trim());
+    return rows.slice(1).map(vals => {
+      const obj: Record<string, string> = {};
+      headers.forEach((h, idx) => { obj[h] = (vals[idx] ?? "").trim(); });
+      return obj;
+    });
   }
 
   async function handleImport() {
@@ -173,17 +212,9 @@ export default function TransactionsPage() {
         const parsed = JSON.parse(text);
         transactions = Array.isArray(parsed) ? parsed : (parsed.transactions || parsed.data || []);
       } else if (fileName.endsWith(".csv")) {
-        // Parse CSV
         const text = await importFile.text();
-        const lines = text.split("\n").filter(l => l.trim());
-        if (lines.length < 2) throw new Error("File CSV kosong atau hanya header.");
-        const headers = lines[0].split(",").map(h => h.trim().replace(/^"|"$/g, ""));
-        for (let i = 1; i < lines.length; i++) {
-          const values = lines[i].split(",").map(v => v.trim().replace(/^"|"$/g, ""));
-          const obj: Record<string, string> = {};
-          headers.forEach((h, idx) => { obj[h] = values[idx] || ""; });
-          transactions.push(obj);
-        }
+        transactions = parseCSV(text);
+        if (transactions.length === 0) throw new Error("File CSV kosong atau hanya header.");
       } else if (fileName.endsWith(".xlsx") || fileName.endsWith(".xls")) {
         // Parse Excel (XLSX/XLS)
         const arrayBuffer = await importFile.arrayBuffer();
@@ -197,18 +228,65 @@ export default function TransactionsPage() {
         throw new Error("Format file tidak didukung. Gunakan .json, .csv, atau .xlsx");
       }
 
-      const res = await fetch("/api/transactions/import", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ transactions }),
-      });
-      const json = await res.json();
-      if (res.ok) {
-        setImportResult(json);
-        fetchData();
-      } else {
-        setImportResult({ success: false, summary: { total: 0, created: 0, skipped: 0, usersCreated: 0, usersUpdated: 0, errors: [json.error] } });
+      // ===== Kirim ke API dalam batch 50 baris agar tidak timeout =====
+      const BATCH_SIZE = 50;
+      const totalBatches = Math.ceil(transactions.length / BATCH_SIZE);
+
+      // Akumulator hasil dari semua batch
+      let totalCreated = 0;
+      let totalSkipped = 0;
+      let totalUsersCreated = 0;
+      let totalUsersUpdated = 0;
+      const allErrors: string[] = [];
+
+      setImportProgress({ current: 0, total: transactions.length, batches: totalBatches, currentBatch: 0 });
+
+      for (let b = 0; b < totalBatches; b++) {
+        const batch = transactions.slice(b * BATCH_SIZE, (b + 1) * BATCH_SIZE);
+        setImportProgress({ current: b * BATCH_SIZE, total: transactions.length, batches: totalBatches, currentBatch: b + 1 });
+
+        const res = await fetch("/api/transactions/import", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ transactions: batch }),
+        });
+
+        // Safe JSON parse
+        const rawText = await res.text();
+        let json: Record<string, unknown>;
+        try {
+          json = JSON.parse(rawText);
+        } catch {
+          allErrors.push(`Batch ${b + 1}: Server error (timeout?) — ${rawText.substring(0, 150)}`);
+          continue; // lanjut ke batch berikutnya
+        }
+
+        if (res.ok && json.summary) {
+          const s = json.summary as { created: number; skipped: number; usersCreated: number; usersUpdated: number; errors: string[] };
+          totalCreated += s.created || 0;
+          totalSkipped += s.skipped || 0;
+          totalUsersCreated += s.usersCreated || 0;
+          totalUsersUpdated += s.usersUpdated || 0;
+          if (s.errors?.length) allErrors.push(...s.errors);
+        } else {
+          allErrors.push(`Batch ${b + 1}: ${ (json.error as string) || "Server error" }`);
+        }
       }
+
+      setImportProgress({ current: transactions.length, total: transactions.length, batches: totalBatches, currentBatch: totalBatches });
+
+      setImportResult({
+        success: true,
+        summary: {
+          total: transactions.length,
+          created: totalCreated,
+          skipped: totalSkipped,
+          usersCreated: totalUsersCreated,
+          usersUpdated: totalUsersUpdated,
+          errors: allErrors.slice(0, 20),
+        },
+      });
+      fetchData();
     } catch (err) {
       setImportResult({ success: false, summary: { total: 0, created: 0, skipped: 0, usersCreated: 0, usersUpdated: 0, errors: [err instanceof Error ? err.message : String(err)] } });
     }
@@ -507,7 +585,9 @@ export default function TransactionsPage() {
                       className="block w-full text-sm text-[var(--text-secondary)] file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-sm file:font-semibold file:bg-[rgba(99,102,241,0.15)] file:text-[#818cf8] hover:file:bg-[rgba(99,102,241,0.25)] file:cursor-pointer file:transition-colors"
                     />
                     {importFile && (
-                      <p className="text-xs text-emerald-400 mt-2 flex items-center gap-1"><CheckCircle size={12} /> {importFile.name} ({(importFile.size / 1024).toFixed(1)} KB)</p>
+                      <p className="text-xs text-emerald-400 mt-2 flex items-center gap-1">
+                        <CheckCircle size={12} /> {importFile.name} ({(importFile.size / 1024).toFixed(1)} KB)
+                      </p>
                     )}
                   </div>
                   <div className="p-3 rounded-xl" style={{ background: "rgba(99,102,241,0.05)", border: "1px solid rgba(99,102,241,0.12)" }}>
@@ -515,11 +595,35 @@ export default function TransactionsPage() {
                       <span className="text-[#818cf8] font-semibold">ℹ️ Info:</span> Data user (nama, email, whatsapp) otomatis dibuat/diperbarui. Transaksi duplikat (ID Lynk.id sama) akan otomatis dilewati.
                     </p>
                   </div>
+                  {importing && importProgress && (
+                    <div className="space-y-2 p-3 rounded-xl" style={{ background: "rgba(99,102,241,0.08)", border: "1px solid rgba(99,102,241,0.2)" }}>
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-xs text-[#818cf8] font-semibold flex items-center gap-1.5">
+                          <Loader2 size={13} className="animate-spin" />
+                          Mengimpor batch {importProgress.currentBatch} dari {importProgress.batches}...
+                        </span>
+                        <span className="text-xs text-[var(--text-muted)]">
+                          {importProgress.current}/{importProgress.total} baris
+                        </span>
+                      </div>
+                      {/* Progress bar */}
+                      <div className="h-2 rounded-full overflow-hidden" style={{ background: "rgba(99,102,241,0.15)" }}>
+                        <div
+                          className="h-full rounded-full transition-all duration-300"
+                          style={{
+                            width: `${importProgress.total > 0 ? Math.round((importProgress.current / importProgress.total) * 100) : 0}%`,
+                            background: "linear-gradient(90deg, #6366f1, #818cf8)"
+                          }}
+                        />
+                      </div>
+                      <p className="text-[11px] text-[var(--text-muted)]">Jangan tutup halaman ini sampai selesai.</p>
+                    </div>
+                  )}
                 </>
               )}
             </div>
             <div className="modal-footer">
-              <button className="btn-secondary" onClick={closeImportModal}>{importResult ? "Tutup" : "Batal"}</button>
+              <button className="btn-secondary" onClick={closeImportModal} disabled={importing}>{importResult ? "Tutup" : "Batal"}</button>
               {!importResult && (
                 <button className="btn-primary gap-2 disabled:opacity-50" onClick={handleImport} disabled={importing || !importFile}>
                   {importing ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
