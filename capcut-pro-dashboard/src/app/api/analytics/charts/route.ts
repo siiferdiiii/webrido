@@ -10,7 +10,6 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const range = searchParams.get("range") || "3m";
 
-    // Hitung tanggal awal berdasarkan range
     const now = new Date();
     const startDate = new Date(now);
 
@@ -18,117 +17,112 @@ export async function GET(req: NextRequest) {
       case "1m": startDate.setMonth(now.getMonth() - 1); break;
       case "6m": startDate.setMonth(now.getMonth() - 6); break;
       case "1y": startDate.setFullYear(now.getFullYear() - 1); break;
-      default:   startDate.setMonth(now.getMonth() - 3); break; // 3m default
+      default:   startDate.setMonth(now.getMonth() - 3); break;
     }
     startDate.setHours(0, 0, 0, 0);
 
-    // Ambil semua transaksi dalam range (hanya success)
+    const useWeekly = range === "6m" || range === "1y";
+
+    // ── Transaksi sukses dalam range ─────────────────────────────────────────
     const transactions = await prisma.transaction.findMany({
-      where: {
-        purchaseDate: { gte: startDate },
-        status: "success",
-      },
-      select: {
-        purchaseDate: true,
-        amount: true,
-      },
+      where: { purchaseDate: { gte: startDate }, status: "success" },
+      select: { purchaseDate: true, amount: true },
       orderBy: { purchaseDate: "asc" },
     });
 
-    // Ambil semua user yang dibuat dalam range
-    const users = await prisma.user.findMany({
-      where: {
-        createdAt: { gte: startDate },
-      },
-      select: {
-        createdAt: true,
-      },
-      orderBy: { createdAt: "asc" },
+    // ── User baru = berdasarkan tanggal transaksi PERTAMA mereka (bukan createdAt) ──
+    // Karena import massal akan set createdAt = hari ini untuk semua user lama
+    const firstTrxPerUser = await prisma.transaction.groupBy({
+      by: ["userId"],
+      where: { status: "success", userId: { not: null } },
+      _min: { purchaseDate: true },
     });
 
-    // Tentukan granularity: daily untuk ≤3m, weekly untuk >3m
-    const useWeekly = range === "6m" || range === "1y";
-
-    // Fungsi untuk get group key
-    const getKey = (date: Date): string => {
-      if (useWeekly) {
-        // Minggu ke-N bulan tertentu
-        const d = new Date(date);
-        // Round ke awal minggu (Senin)
-        const day = d.getDay();
-        const diff = (day === 0 ? -6 : 1) - day;
-        d.setDate(d.getDate() + diff);
-        return d.toISOString().slice(0, 10);
+    const newUsersInRange: Date[] = [];
+    for (const row of firstTrxPerUser) {
+      const d = row._min.purchaseDate;
+      if (d && d >= startDate && d <= now) {
+        newUsersInRange.push(d);
       }
+    }
+
+    // ── Helpers ──────────────────────────────────────────────────────────────
+    const getWeekStart = (date: Date): Date => {
+      const d = new Date(date);
+      const day = d.getDay();
+      d.setDate(d.getDate() + ((day === 0 ? -6 : 1) - day));
+      d.setHours(0, 0, 0, 0);
+      return d;
+    };
+
+    const getKey = (date: Date): string => {
+      if (useWeekly) return getWeekStart(date).toISOString().slice(0, 10);
       return date.toISOString().slice(0, 10);
     };
 
-    // Label display
+    // Label pendek untuk sumbu X
     const getLabel = (key: string): string => {
       const d = new Date(key + "T00:00:00");
-      if (useWeekly) {
-        return d.toLocaleDateString("id-ID", { day: "numeric", month: "short" });
-      }
       return d.toLocaleDateString("id-ID", { day: "numeric", month: "short" });
     };
 
-    // Build date map dari startDate s/d now
-    const dateMap = new Map<string, { penjualan: number; omset: number; newUser: number }>();
+    // Label lengkap periode untuk tooltip (misal "1 Mar – 7 Mar")
+    const getPeriodLabel = (key: string): string => {
+      const d = new Date(key + "T00:00:00");
+      if (useWeekly) {
+        const end = new Date(d);
+        end.setDate(end.getDate() + 6);
+        const fmt = (dt: Date) =>
+          dt.toLocaleDateString("id-ID", { day: "numeric", month: "short" });
+        return `${fmt(d)} – ${fmt(end)}`;
+      }
+      return d.toLocaleDateString("id-ID", {
+        weekday: "short",
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+      });
+    };
 
-    // Generate semua keys dalam range
+    // ── Build date map ────────────────────────────────────────────────────────
+    const dateMap = new Map<string, { penjualan: number; omset: number; newUser: number }>();
     const cursor = new Date(startDate);
     while (cursor <= now) {
       const key = getKey(cursor);
-      if (!dateMap.has(key)) {
-        dateMap.set(key, { penjualan: 0, omset: 0, newUser: 0 });
-      }
-      if (useWeekly) {
-        cursor.setDate(cursor.getDate() + 7);
-      } else {
-        cursor.setDate(cursor.getDate() + 1);
-      }
+      if (!dateMap.has(key)) dateMap.set(key, { penjualan: 0, omset: 0, newUser: 0 });
+      cursor.setDate(cursor.getDate() + (useWeekly ? 7 : 1));
     }
 
-    // Aggregate transaksi
+    // ── Aggregate transaksi ───────────────────────────────────────────────────
     for (const trx of transactions) {
       if (!trx.purchaseDate) continue;
-      const key = getKey(new Date(trx.purchaseDate));
-      const entry = dateMap.get(key);
-      if (entry) {
-        entry.penjualan += 1;
-        entry.omset += Number(trx.amount);
-      }
+      const entry = dateMap.get(getKey(new Date(trx.purchaseDate)));
+      if (entry) { entry.penjualan += 1; entry.omset += Number(trx.amount); }
     }
 
-    // Aggregate users baru
-    for (const user of users) {
-      if (!user.createdAt) continue;
-      const key = getKey(new Date(user.createdAt));
-      const entry = dateMap.get(key);
-      if (entry) {
-        entry.newUser += 1;
-      }
+    // ── Aggregate user baru ───────────────────────────────────────────────────
+    for (const d of newUsersInRange) {
+      const entry = dateMap.get(getKey(d));
+      if (entry) entry.newUser += 1;
     }
 
-    // Convert to array sorted by date
+    // ── Build final array ─────────────────────────────────────────────────────
     const chartData = Array.from(dateMap.entries())
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([key, val]) => ({
         date: key,
         label: getLabel(key),
-        penjualan: val.penjualan,
-        omset: val.omset,
-        newUser: val.newUser,
+        periodLabel: getPeriodLabel(key),
+        ...val,
       }));
-
-    // Summary stats untuk comparison
-    const totalPenjualan = chartData.reduce((s, d) => s + d.penjualan, 0);
-    const totalOmset = chartData.reduce((s, d) => s + d.omset, 0);
-    const totalNewUser = chartData.reduce((s, d) => s + d.newUser, 0);
 
     return NextResponse.json({
       chartData,
-      summary: { totalPenjualan, totalOmset, totalNewUser },
+      summary: {
+        totalPenjualan: chartData.reduce((s, d) => s + d.penjualan, 0),
+        totalOmset: chartData.reduce((s, d) => s + d.omset, 0),
+        totalNewUser: chartData.reduce((s, d) => s + d.newUser, 0),
+      },
       range,
       startDate: startDate.toISOString(),
       endDate: now.toISOString(),

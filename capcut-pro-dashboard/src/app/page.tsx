@@ -53,6 +53,7 @@ interface StatData {
 interface ChartPoint {
   date: string;
   label: string;
+  periodLabel: string;
   penjualan: number;
   omset: number;
   newUser: number;
@@ -101,8 +102,9 @@ function getStatusBadge(status: string | null) {
 
 // ─── Custom Tooltip ───────────────────────────────────────────────────────────
 
-function PenjualanTooltip({ active, payload, label }: any) {
+function PenjualanTooltip({ active, payload }: any) {
   if (!active || !payload?.length) return null;
+  const d = payload[0]?.payload as ChartPoint;
   return (
     <div style={{
       background: "rgba(15,17,30,0.97)",
@@ -111,7 +113,7 @@ function PenjualanTooltip({ active, payload, label }: any) {
       padding: "10px 14px",
       backdropFilter: "blur(16px)",
     }}>
-      <p style={{ color: "#818cf8", fontSize: 12, fontWeight: 600, marginBottom: 4 }}>{label}</p>
+      <p style={{ color: "#818cf8", fontSize: 11, fontWeight: 600, marginBottom: 2 }}>{d?.periodLabel || d?.label}</p>
       <p style={{ color: "white", fontSize: 14, fontWeight: 700 }}>
         {payload[0]?.value} transaksi
       </p>
@@ -119,8 +121,9 @@ function PenjualanTooltip({ active, payload, label }: any) {
   );
 }
 
-function OmsetTooltip({ active, payload, label }: any) {
+function OmsetTooltip({ active, payload }: any) {
   if (!active || !payload?.length) return null;
+  const d = payload[0]?.payload as ChartPoint;
   return (
     <div style={{
       background: "rgba(15,17,30,0.97)",
@@ -129,7 +132,7 @@ function OmsetTooltip({ active, payload, label }: any) {
       padding: "10px 14px",
       backdropFilter: "blur(16px)",
     }}>
-      <p style={{ color: "#34d399", fontSize: 12, fontWeight: 600, marginBottom: 4 }}>{label}</p>
+      <p style={{ color: "#34d399", fontSize: 11, fontWeight: 600, marginBottom: 2 }}>{d?.periodLabel || d?.label}</p>
       <p style={{ color: "white", fontSize: 14, fontWeight: 700 }}>
         {formatCurrency(payload[0]?.value || 0)}
       </p>
@@ -137,8 +140,9 @@ function OmsetTooltip({ active, payload, label }: any) {
   );
 }
 
-function UserTooltip({ active, payload, label }: any) {
+function UserTooltip({ active, payload }: any) {
   if (!active || !payload?.length) return null;
+  const d = payload[0]?.payload as ChartPoint;
   return (
     <div style={{
       background: "rgba(15,17,30,0.97)",
@@ -147,9 +151,9 @@ function UserTooltip({ active, payload, label }: any) {
       padding: "10px 14px",
       backdropFilter: "blur(16px)",
     }}>
-      <p style={{ color: "#22d3ee", fontSize: 12, fontWeight: 600, marginBottom: 4 }}>{label}</p>
+      <p style={{ color: "#22d3ee", fontSize: 11, fontWeight: 600, marginBottom: 2 }}>{d?.periodLabel || d?.label}</p>
       <p style={{ color: "white", fontSize: 14, fontWeight: 700 }}>
-        +{payload[0]?.value} user baru
+        +{payload[0]?.value} pelanggan baru
       </p>
     </div>
   );
@@ -226,9 +230,10 @@ export default function DashboardPage() {
     },
   ];
 
-  const LABEL_TICK_COUNT = chartData?.chartData?.length
-    ? Math.max(1, Math.floor(chartData.chartData.length / (range === "1m" ? 6 : range === "3m" ? 8 : 8)))
-    : 6;
+  // Hitung interval tick agar sumbu X cukup padat tapi tidak tumpang tindih
+  const totalPoints = chartData?.chartData?.length || 0;
+  const maxTicks = range === "1m" ? 10 : range === "3m" ? 12 : 10;
+  const LABEL_TICK_COUNT = totalPoints <= maxTicks ? 1 : Math.ceil(totalPoints / maxTicks);
 
   const filteredLabels = (chartData?.chartData || []).filter(
     (_, i) => i % LABEL_TICK_COUNT === 0 || i === (chartData?.chartData?.length || 1) - 1
