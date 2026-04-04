@@ -38,8 +38,19 @@ export async function GET(req: NextRequest) {
       ];
     }
 
-    if (status === "active") where.subscriptionStatus = "active";
-    if (status === "inactive") where.subscriptionStatus = "inactive";
+    const sixtyDaysAgo = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000);
+
+    if (status === "active") {
+      // Aktif = punya transaksi sukses dalam 60 hari terakhir
+      where.transactions = {
+        some: { status: "success", purchaseDate: { gte: sixtyDaysAgo } },
+      };
+    } else if (status === "inactive") {
+      // Tidak Aktif = tidak punya transaksi sukses dalam 60 hari terakhir
+      where.transactions = {
+        none: { status: "success", purchaseDate: { gte: sixtyDaysAgo } },
+      };
+    }
 
     if (followUp && followUp !== "none" && followUp !== "all") {
       where.followUpStatus = followUp;

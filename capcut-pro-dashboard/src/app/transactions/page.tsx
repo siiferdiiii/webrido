@@ -19,6 +19,10 @@ import {
   Copy,
   LayoutList,
   LayoutGrid,
+  Minimize2,
+  Maximize2,
+  Clock,
+  Files,
 } from "lucide-react";
 
 interface Transaction {
@@ -96,11 +100,29 @@ export default function TransactionsPage() {
   }
 
   // Import state
+  interface FileJob {
+    file: File;
+    status: 'waiting' | 'importing' | 'done' | 'error';
+    created: number;
+    skipped: number;
+    errors: string[];
+    rows: number;
+  }
+  interface ImportProgress {
+    fileIndex: number;      // file ke berapa (0-based)
+    totalFiles: number;
+    currentBatch: number;
+    totalBatches: number;
+    currentRows: number;
+    totalRows: number;
+  }
+
   const [showImportModal, setShowImportModal] = useState(false);
+  const [importMinimized, setImportMinimized] = useState(false);
   const [importing, setImporting] = useState(false);
-  const [importResult, setImportResult] = useState<{ success: boolean; summary: { total: number; created: number; skipped: number; usersCreated: number; usersUpdated: number; errors: string[] } } | null>(null);
-  const [importFile, setImportFile] = useState<File | null>(null);
-  const [importProgress, setImportProgress] = useState<{ current: number; total: number; batches: number; currentBatch: number } | null>(null);
+  const [importFiles, setImportFiles] = useState<FileJob[]>([]);
+  const [importProgress, setImportProgress] = useState<ImportProgress | null>(null);
+  const [importDone, setImportDone] = useState(false);
 
   const fetchData = useCallback(() => {
     setLoading(true);
@@ -155,10 +177,27 @@ export default function TransactionsPage() {
     setResult(null);
   }
 
+  function openImportModal() {
+    setShowImportModal(true);
+    setImportMinimized(false);
+  }
+
   function closeImportModal() {
+    if (importing) return; // jangan tutup saat proses berlangsung
     setShowImportModal(false);
-    setImportFile(null);
-    setImportResult(null);
+    setImportMinimized(false);
+    setImportFiles([]);
+    setImportProgress(null);
+    setImportDone(false);
+  }
+
+  function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const selected = Array.from(e.target.files || []);
+    if (selected.length === 0) return;
+    // Sort: terbaru → terlama berdasarkan lastModified
+    const sorted = selected.sort((a, b) => b.lastModified - a.lastModified);
+    setImportFiles(sorted.map(f => ({ file: f, status: 'waiting', created: 0, skipped: 0, errors: [], rows: 0 })));
+    setImportDone(false);
     setImportProgress(null);
   }
 
@@ -199,98 +238,109 @@ export default function TransactionsPage() {
     });
   }
 
-  async function handleImport() {
-    if (!importFile) return;
-    setImporting(true);
-    setImportResult(null);
-    try {
-      let transactions: Record<string, unknown>[] = [];
-      const fileName = importFile.name.toLowerCase();
+  async function parseFileToRows(file: File): Promise<Record<string, unknown>[]> {
+    const fileName = file.name.toLowerCase();
+    if (fileName.endsWith(".json")) {
+      const text = await file.text();
+      const parsed = JSON.parse(text);
+      return Array.isArray(parsed) ? parsed : (parsed.transactions || parsed.data || []);
+    } else if (fileName.endsWith(".csv")) {
+      const text = await file.text();
+      const rows = parseCSV(text);
+      if (rows.length === 0) throw new Error("File CSV kosong atau hanya header.");
+      return rows;
+    } else if (fileName.endsWith(".xlsx") || fileName.endsWith(".xls")) {
+      const arrayBuffer = await file.arrayBuffer();
+      const workbook = XLSX.read(arrayBuffer, { type: "array" });
+      const firstSheetName = workbook.SheetNames[0];
+      if (!firstSheetName) throw new Error("File Excel kosong.");
+      const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(workbook.Sheets[firstSheetName]);
+      if (rows.length === 0) throw new Error("Sheet pertama kosong.");
+      return rows;
+    }
+    throw new Error("Format tidak didukung. Gunakan .json, .csv, atau .xlsx");
+  }
 
-      if (fileName.endsWith(".json")) {
-        const text = await importFile.text();
-        const parsed = JSON.parse(text);
-        transactions = Array.isArray(parsed) ? parsed : (parsed.transactions || parsed.data || []);
-      } else if (fileName.endsWith(".csv")) {
-        const text = await importFile.text();
-        transactions = parseCSV(text);
-        if (transactions.length === 0) throw new Error("File CSV kosong atau hanya header.");
-      } else if (fileName.endsWith(".xlsx") || fileName.endsWith(".xls")) {
-        // Parse Excel (XLSX/XLS)
-        const arrayBuffer = await importFile.arrayBuffer();
-        const workbook = XLSX.read(arrayBuffer, { type: "array" });
-        const firstSheetName = workbook.SheetNames[0];
-        if (!firstSheetName) throw new Error("File Excel kosong, tidak ada sheet.");
-        const worksheet = workbook.Sheets[firstSheetName];
-        transactions = XLSX.utils.sheet_to_json(worksheet);
-        if (transactions.length === 0) throw new Error("Sheet pertama kosong atau hanya header.");
-      } else {
-        throw new Error("Format file tidak didukung. Gunakan .json, .csv, atau .xlsx");
+  async function handleImport() {
+    if (importFiles.length === 0) return;
+    setImporting(true);
+    setImportDone(false);
+
+    const BATCH_SIZE = 50;
+    const jobs = [...importFiles];
+
+    for (let fi = 0; fi < jobs.length; fi++) {
+      // Update status file ini jadi 'importing'
+      setImportFiles(prev => prev.map((j, idx) => idx === fi ? { ...j, status: 'importing' } : j));
+
+      let transactions: Record<string, unknown>[] = [];
+      try {
+        transactions = await parseFileToRows(jobs[fi].file);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        setImportFiles(prev => prev.map((j, idx) => idx === fi ? { ...j, status: 'error', errors: [msg] } : j));
+        continue;
       }
 
-      // ===== Kirim ke API dalam batch 50 baris agar tidak timeout =====
-      const BATCH_SIZE = 50;
       const totalBatches = Math.ceil(transactions.length / BATCH_SIZE);
-
-      // Akumulator hasil dari semua batch
-      let totalCreated = 0;
-      let totalSkipped = 0;
-      let totalUsersCreated = 0;
-      let totalUsersUpdated = 0;
-      const allErrors: string[] = [];
-
-      setImportProgress({ current: 0, total: transactions.length, batches: totalBatches, currentBatch: 0 });
+      let filCreated = 0, filSkipped = 0;
+      const filErrors: string[] = [];
 
       for (let b = 0; b < totalBatches; b++) {
-        const batch = transactions.slice(b * BATCH_SIZE, (b + 1) * BATCH_SIZE);
-        setImportProgress({ current: b * BATCH_SIZE, total: transactions.length, batches: totalBatches, currentBatch: b + 1 });
-
-        const res = await fetch("/api/transactions/import", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ transactions: batch }),
+        setImportProgress({
+          fileIndex: fi,
+          totalFiles: jobs.length,
+          currentBatch: b + 1,
+          totalBatches,
+          currentRows: b * BATCH_SIZE,
+          totalRows: transactions.length,
         });
 
-        // Safe JSON parse
-        const rawText = await res.text();
-        let json: Record<string, unknown>;
+        const batch = transactions.slice(b * BATCH_SIZE, (b + 1) * BATCH_SIZE);
         try {
-          json = JSON.parse(rawText);
-        } catch {
-          allErrors.push(`Batch ${b + 1}: Server error (timeout?) — ${rawText.substring(0, 150)}`);
-          continue; // lanjut ke batch berikutnya
-        }
+          const res = await fetch("/api/transactions/import", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ transactions: batch }),
+          });
+          const rawText = await res.text();
+          let json: Record<string, unknown>;
+          try { json = JSON.parse(rawText); }
+          catch { filErrors.push(`Batch ${b + 1}: Server error — ${rawText.substring(0, 100)}`); continue; }
 
-        if (res.ok && json.summary) {
-          const s = json.summary as { created: number; skipped: number; usersCreated: number; usersUpdated: number; errors: string[] };
-          totalCreated += s.created || 0;
-          totalSkipped += s.skipped || 0;
-          totalUsersCreated += s.usersCreated || 0;
-          totalUsersUpdated += s.usersUpdated || 0;
-          if (s.errors?.length) allErrors.push(...s.errors);
-        } else {
-          allErrors.push(`Batch ${b + 1}: ${ (json.error as string) || "Server error" }`);
+          if (res.ok && json.summary) {
+            const s = json.summary as { created: number; skipped: number; errors: string[] };
+            filCreated += s.created || 0;
+            filSkipped += s.skipped || 0;
+            if (s.errors?.length) filErrors.push(...s.errors);
+          } else {
+            filErrors.push(`Batch ${b + 1}: ${(json.error as string) || 'Server error'}`);
+          }
+        } catch (err) {
+          filErrors.push(`Batch ${b + 1}: ${err instanceof Error ? err.message : String(err)}`);
         }
       }
 
-      setImportProgress({ current: transactions.length, total: transactions.length, batches: totalBatches, currentBatch: totalBatches });
-
-      setImportResult({
-        success: true,
-        summary: {
-          total: transactions.length,
-          created: totalCreated,
-          skipped: totalSkipped,
-          usersCreated: totalUsersCreated,
-          usersUpdated: totalUsersUpdated,
-          errors: allErrors.slice(0, 20),
-        },
+      // Final progress untuk file ini
+      setImportProgress({
+        fileIndex: fi,
+        totalFiles: jobs.length,
+        currentBatch: totalBatches,
+        totalBatches,
+        currentRows: transactions.length,
+        totalRows: transactions.length,
       });
-      fetchData();
-    } catch (err) {
-      setImportResult({ success: false, summary: { total: 0, created: 0, skipped: 0, usersCreated: 0, usersUpdated: 0, errors: [err instanceof Error ? err.message : String(err)] } });
+
+      setImportFiles(prev => prev.map((j, idx) =>
+        idx === fi ? { ...j, status: filErrors.length > 0 && filCreated === 0 ? 'error' : 'done', created: filCreated, skipped: filSkipped, errors: filErrors.slice(0, 10), rows: transactions.length } : j
+      ));
     }
+
+    fetchData();
     setImporting(false);
+    setImportDone(true);
+    setImportMinimized(false);
+    setShowImportModal(true);
   }
 
   return (
@@ -330,7 +380,7 @@ export default function TransactionsPage() {
             </div>
           </div>
           <div className="flex gap-2 flex-shrink-0">
-            <button className="btn-secondary flex items-center gap-1.5" onClick={() => setShowImportModal(true)}><Upload size={16} /> Import Lynk.id</button>
+            <button className="btn-secondary flex items-center gap-1.5" onClick={openImportModal}><Upload size={16} /> Import Lynk.id</button>
             <button className="btn-primary flex-shrink-0" onClick={() => setShowModal(true)}><Plus size={16} /> Tambah Manual</button>
           </div>
         </div>
@@ -527,108 +577,203 @@ export default function TransactionsPage() {
         </div>
       )}
 
-      {/* Modal Import Lynk.id */}
-      {showImportModal && (
-        <div className="modal-overlay" onClick={closeImportModal}>
-          <div className="modal-content" style={{ maxWidth: 520 }} onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h3 className="font-semibold text-white text-lg flex items-center gap-2"><FileSpreadsheet size={18} className="text-[#818cf8]" /> Import Data Lynk.id</h3>
-              <button className="btn-icon" onClick={closeImportModal}><X size={18} /></button>
-            </div>
-            <div className="modal-body space-y-4">
-              {importResult ? (
-                <div className="space-y-4">
-                  <div className={`p-4 rounded-xl border ${importResult.success ? "border-emerald-500/20 bg-emerald-500/5" : "border-rose-500/20 bg-rose-500/5"}`}>
-                    <p className={`font-semibold ${importResult.success ? "text-emerald-300" : "text-rose-300"} flex items-center gap-2`}>
-                      {importResult.success ? <><CheckCircle size={16} /> Import Berhasil!</> : <><AlertTriangle size={16} /> Import Gagal</>}
-                    </p>
-                  </div>
-
-                  {importResult.success && (
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="p-3 rounded-xl text-center" style={{ background: "rgba(34,197,94,0.08)", border: "1px solid rgba(34,197,94,0.2)" }}>
-                        <p className="text-lg font-bold text-emerald-400">{importResult.summary.created}</p>
-                        <p className="text-[10px] text-[var(--text-muted)]">Transaksi Dibuat</p>
-                      </div>
-                      <div className="p-3 rounded-xl text-center" style={{ background: "rgba(250,204,21,0.08)", border: "1px solid rgba(250,204,21,0.2)" }}>
-                        <p className="text-lg font-bold text-yellow-400">{importResult.summary.skipped}</p>
-                        <p className="text-[10px] text-[var(--text-muted)]">Dilewati (Duplikat)</p>
-                      </div>
-                      <div className="p-3 rounded-xl text-center" style={{ background: "rgba(99,102,241,0.08)", border: "1px solid rgba(99,102,241,0.2)" }}>
-                        <p className="text-lg font-bold text-[#818cf8]">{importResult.summary.usersCreated}</p>
-                        <p className="text-[10px] text-[var(--text-muted)]">User Baru Dibuat</p>
-                      </div>
-                      <div className="p-3 rounded-xl text-center" style={{ background: "rgba(6,182,212,0.08)", border: "1px solid rgba(6,182,212,0.2)" }}>
-                        <p className="text-lg font-bold text-cyan-400">{importResult.summary.usersUpdated}</p>
-                        <p className="text-[10px] text-[var(--text-muted)]">User Diperbarui</p>
-                      </div>
-                    </div>
-                  )}
-
-                  {importResult.summary.errors.length > 0 && (
-                    <div className="p-3 rounded-xl bg-rose-500/5 border border-rose-500/15 max-h-32 overflow-y-auto">
-                      <p className="text-xs font-semibold text-rose-400 mb-1">Errors:</p>
-                      {importResult.summary.errors.map((e, i) => (
-                        <p key={i} className="text-xs text-rose-300/80">{e}</p>
-                      ))}
-                    </div>
-                  )}
+      {/* ── Floating badge saat import di-minimize ── */}
+      {(importing || importDone) && importMinimized && (
+        <div
+          onClick={() => { setImportMinimized(false); setShowImportModal(true); }}
+          className="fixed bottom-6 right-6 z-50 flex items-center gap-3 px-4 py-3 rounded-2xl cursor-pointer shadow-2xl"
+          style={{ background: "linear-gradient(135deg, #4f46e5, #6366f1)", border: "1px solid rgba(129,140,248,0.4)", minWidth: 240 }}
+        >
+          {importing ? (
+            <Loader2 size={16} className="animate-spin text-white flex-shrink-0" />
+          ) : (
+            <CheckCircle size={16} className="text-emerald-300 flex-shrink-0" />
+          )}
+          <div className="flex-1 min-w-0">
+            {importing && importProgress ? (
+              <>
+                <p className="text-xs font-semibold text-white">
+                  File {importProgress.fileIndex + 1}/{importProgress.totalFiles} — Batch {importProgress.currentBatch}/{importProgress.totalBatches}
+                </p>
+                <div className="h-1 mt-1.5 rounded-full overflow-hidden bg-white/20">
+                  <div
+                    className="h-full rounded-full transition-all duration-300 bg-white"
+                    style={{ width: `${importProgress.totalRows > 0 ? Math.round((importProgress.currentRows / importProgress.totalRows) * 100) : 0}%` }}
+                  />
                 </div>
-              ) : (
-                <>
-                  <div className="p-4 rounded-xl" style={{ background: "var(--bg-secondary)", border: "1px dashed var(--border-color)" }}>
-                    <p className="text-sm text-[var(--text-secondary)] mb-3">Upload file transaksi dari Lynk.id dalam format <span className="text-white font-medium">.json</span>, <span className="text-white font-medium">.csv</span>, atau <span className="text-white font-medium">.xlsx</span></p>
-                    <input
-                      type="file"
-                      accept=".json,.csv,.xlsx,.xls"
-                      onChange={(e) => setImportFile(e.target.files?.[0] || null)}
-                      className="block w-full text-sm text-[var(--text-secondary)] file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-sm file:font-semibold file:bg-[rgba(99,102,241,0.15)] file:text-[#818cf8] hover:file:bg-[rgba(99,102,241,0.25)] file:cursor-pointer file:transition-colors"
-                    />
-                    {importFile && (
-                      <p className="text-xs text-emerald-400 mt-2 flex items-center gap-1">
-                        <CheckCircle size={12} /> {importFile.name} ({(importFile.size / 1024).toFixed(1)} KB)
-                      </p>
-                    )}
+              </>
+            ) : (
+              <p className="text-xs font-semibold text-white">Import selesai! Klik untuk lihat hasil.</p>
+            )}
+          </div>
+          <Maximize2 size={14} className="text-white/70 flex-shrink-0" />
+        </div>
+      )}
+
+      {/* ── Modal Import Lynk.id ── */}
+      {showImportModal && !importMinimized && (
+        <div className="modal-overlay" onClick={() => { if (!importing) closeImportModal(); }}>
+          <div className="modal-content" style={{ maxWidth: 560 }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3 className="font-semibold text-white text-lg flex items-center gap-2">
+                <FileSpreadsheet size={18} className="text-[#818cf8]" /> Import Data Lynk.id
+              </h3>
+              <div className="flex items-center gap-1">
+                {importing && (
+                  <button
+                    className="btn-icon"
+                    title="Minimize — import tetap berjalan"
+                    onClick={() => { setImportMinimized(true); setShowImportModal(false); }}
+                  >
+                    <Minimize2 size={16} />
+                  </button>
+                )}
+                <button className="btn-icon" onClick={closeImportModal} disabled={importing}>
+                  <X size={18} />
+                </button>
+              </div>
+            </div>
+
+            <div className="modal-body space-y-4">
+              {/* ── File picker (hanya tampil jika belum mulai) ── */}
+              {!importing && !importDone && (
+                <div className="p-4 rounded-xl space-y-3" style={{ background: "var(--bg-secondary)", border: "1px dashed var(--border-color)" }}>
+                  <p className="text-sm text-[var(--text-secondary)]">
+                    Pilih satu atau beberapa file Lynk.id (<span className="text-white font-medium">.csv</span>, <span className="text-white font-medium">.xlsx</span>, <span className="text-white font-medium">.json</span>). Akan diproses dari <span className="text-[#818cf8] font-medium">terbaru → terlama</span>.
+                  </p>
+                  <input
+                    type="file"
+                    accept=".json,.csv,.xlsx,.xls"
+                    multiple
+                    onChange={handleFileSelect}
+                    className="block w-full text-sm text-[var(--text-secondary)] file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-sm file:font-semibold file:bg-[rgba(99,102,241,0.15)] file:text-[#818cf8] hover:file:bg-[rgba(99,102,241,0.25)] file:cursor-pointer file:transition-colors"
+                  />
+                </div>
+              )}
+
+              {/* ── Daftar file ── */}
+              {importFiles.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-xs font-semibold text-[var(--text-muted)] flex items-center gap-1.5">
+                    <Files size={12} /> {importFiles.length} file — urutan proses (terbaru → terlama)
+                  </p>
+                  <div className="space-y-2 max-h-52 overflow-y-auto pr-1">
+                    {importFiles.map((job, idx) => {
+                      const isActive = importing && importProgress?.fileIndex === idx;
+                      const pct = isActive && importProgress && importProgress.totalRows > 0
+                        ? Math.round((importProgress.currentRows / importProgress.totalRows) * 100)
+                        : job.status === 'done' || job.status === 'error' ? 100 : 0;
+
+                      return (
+                        <div key={idx} className="p-3 rounded-xl" style={{
+                          background: job.status === 'done' ? "rgba(34,197,94,0.06)"
+                            : job.status === 'error' ? "rgba(239,68,68,0.06)"
+                            : job.status === 'importing' ? "rgba(99,102,241,0.08)"
+                            : "rgba(255,255,255,0.03)",
+                          border: `1px solid ${job.status === 'done' ? "rgba(34,197,94,0.2)"
+                            : job.status === 'error' ? "rgba(239,68,68,0.2)"
+                            : job.status === 'importing' ? "rgba(99,102,241,0.25)"
+                            : "rgba(255,255,255,0.06)"}`
+                        }}>
+                          <div className="flex items-center gap-2 mb-1">
+                            {job.status === 'waiting' && <Clock size={13} className="text-[var(--text-muted)] flex-shrink-0" />}
+                            {job.status === 'importing' && <Loader2 size={13} className="animate-spin text-[#818cf8] flex-shrink-0" />}
+                            {job.status === 'done' && <CheckCircle size={13} className="text-emerald-400 flex-shrink-0" />}
+                            {job.status === 'error' && <AlertTriangle size={13} className="text-rose-400 flex-shrink-0" />}
+                            <span className="text-xs font-medium text-white truncate flex-1">{job.file.name}</span>
+                            <span className="text-[10px] text-[var(--text-muted)] flex-shrink-0">{(job.file.size / 1024).toFixed(0)} KB</span>
+                          </div>
+
+                          {/* Progress bar per file */}
+                          {(isActive || job.status === 'done' || job.status === 'error') && (
+                            <div className="h-1 rounded-full overflow-hidden mb-1.5" style={{ background: "rgba(99,102,241,0.15)" }}>
+                              <div
+                                className="h-full rounded-full transition-all duration-300"
+                                style={{
+                                  width: `${pct}%`,
+                                  background: job.status === 'done' ? "#22c55e"
+                                    : job.status === 'error' ? "#ef4444"
+                                    : "linear-gradient(90deg, #6366f1, #818cf8)"
+                                }}
+                              />
+                            </div>
+                          )}
+
+                          {/* Stats */}
+                          <div className="flex items-center gap-3 flex-wrap">
+                            {isActive && importProgress && (
+                              <span className="text-[10px] text-[#818cf8]">
+                                Batch {importProgress.currentBatch}/{importProgress.totalBatches} · {importProgress.currentRows}/{importProgress.totalRows} baris
+                              </span>
+                            )}
+                            {job.status === 'done' && (
+                              <>
+                                <span className="text-[10px] text-emerald-400">✓ {job.created} dibuat</span>
+                                {job.skipped > 0 && <span className="text-[10px] text-yellow-400">⊘ {job.skipped} duplikat</span>}
+                              </>
+                            )}
+                            {job.status === 'waiting' && <span className="text-[10px] text-[var(--text-muted)]">Menunggu...</span>}
+                            {job.status === 'error' && job.errors.length > 0 && (
+                              <span className="text-[10px] text-rose-400 truncate">{job.errors[0]}</span>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
-                  <div className="p-3 rounded-xl" style={{ background: "rgba(99,102,241,0.05)", border: "1px solid rgba(99,102,241,0.12)" }}>
-                    <p className="text-xs text-[var(--text-muted)] leading-relaxed">
-                      <span className="text-[#818cf8] font-semibold">ℹ️ Info:</span> Data user (nama, email, whatsapp) otomatis dibuat/diperbarui. Transaksi duplikat (ID Lynk.id sama) akan otomatis dilewati.
-                    </p>
+                </div>
+              )}
+
+              {/* ── Ringkasan total setelah selesai ── */}
+              {importDone && (
+                <div className="p-3 rounded-xl" style={{ background: "rgba(34,197,94,0.06)", border: "1px solid rgba(34,197,94,0.2)" }}>
+                  <p className="text-sm font-semibold text-emerald-300 flex items-center gap-2 mb-2">
+                    <CheckCircle size={15} /> Semua file selesai diproses!
+                  </p>
+                  <div className="grid grid-cols-3 gap-2">
+                    {[
+                      { label: "Transaksi Dibuat", val: importFiles.reduce((a, j) => a + j.created, 0), color: "text-emerald-400" },
+                      { label: "Duplikat Dilewati", val: importFiles.reduce((a, j) => a + j.skipped, 0), color: "text-yellow-400" },
+                      { label: "File Berhasil", val: importFiles.filter(j => j.status === 'done').length, color: "text-[#818cf8]" },
+                    ].map(({ label, val, color }) => (
+                      <div key={label} className="text-center p-2 rounded-lg" style={{ background: "rgba(255,255,255,0.03)" }}>
+                        <p className={`text-base font-bold ${color}`}>{val}</p>
+                        <p className="text-[9px] text-[var(--text-muted)]">{label}</p>
+                      </div>
+                    ))}
                   </div>
-                  {importing && importProgress && (
-                    <div className="space-y-2 p-3 rounded-xl" style={{ background: "rgba(99,102,241,0.08)", border: "1px solid rgba(99,102,241,0.2)" }}>
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="text-xs text-[#818cf8] font-semibold flex items-center gap-1.5">
-                          <Loader2 size={13} className="animate-spin" />
-                          Mengimpor batch {importProgress.currentBatch} dari {importProgress.batches}...
-                        </span>
-                        <span className="text-xs text-[var(--text-muted)]">
-                          {importProgress.current}/{importProgress.total} baris
-                        </span>
-                      </div>
-                      {/* Progress bar */}
-                      <div className="h-2 rounded-full overflow-hidden" style={{ background: "rgba(99,102,241,0.15)" }}>
-                        <div
-                          className="h-full rounded-full transition-all duration-300"
-                          style={{
-                            width: `${importProgress.total > 0 ? Math.round((importProgress.current / importProgress.total) * 100) : 0}%`,
-                            background: "linear-gradient(90deg, #6366f1, #818cf8)"
-                          }}
-                        />
-                      </div>
-                      <p className="text-[11px] text-[var(--text-muted)]">Jangan tutup halaman ini sampai selesai.</p>
-                    </div>
-                  )}
-                </>
+                </div>
+              )}
+
+              {/* ── Info box ── */}
+              {!importDone && importFiles.length === 0 && (
+                <div className="p-3 rounded-xl" style={{ background: "rgba(99,102,241,0.05)", border: "1px solid rgba(99,102,241,0.12)" }}>
+                  <p className="text-xs text-[var(--text-muted)] leading-relaxed">
+                    <span className="text-[#818cf8] font-semibold">ℹ️ Info:</span> Data user otomatis dibuat/diperbarui. Duplikat (ID Lynk.id sama) otomatis dilewati. Bisa pilih banyak file sekaligus.
+                  </p>
+                </div>
               )}
             </div>
+
             <div className="modal-footer">
-              <button className="btn-secondary" onClick={closeImportModal} disabled={importing}>{importResult ? "Tutup" : "Batal"}</button>
-              {!importResult && (
-                <button className="btn-primary gap-2 disabled:opacity-50" onClick={handleImport} disabled={importing || !importFile}>
-                  {importing ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
-                  {importing ? "Mengimpor..." : "Mulai Import"}
+              {importDone ? (
+                <button className="btn-secondary" onClick={closeImportModal}>Tutup</button>
+              ) : importing ? (
+                <button className="btn-secondary" onClick={() => { setImportMinimized(true); setShowImportModal(false); }}>
+                  <Minimize2 size={14} /> Sembunyikan
                 </button>
+              ) : (
+                <>
+                  <button className="btn-secondary" onClick={closeImportModal}>Batal</button>
+                  <button
+                    className="btn-primary gap-2 disabled:opacity-50"
+                    onClick={handleImport}
+                    disabled={importFiles.length === 0}
+                  >
+                    <Upload size={16} />
+                    Mulai Import {importFiles.length > 1 ? `(${importFiles.length} file)` : ""}
+                  </button>
+                </>
               )}
             </div>
           </div>

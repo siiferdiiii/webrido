@@ -299,8 +299,16 @@ export default function UsersPage() {
     }
   }
 
-  function getStatusBadge(status: string | null) {
-    return status === "active"
+  /** True jika user punya transaksi dalam 60 hari terakhir */
+  function isUserActive(user: UserItem): boolean {
+    const lastDate = user.transactions[0]?.purchaseDate;
+    if (!lastDate) return false;
+    const diff = Date.now() - new Date(lastDate).getTime();
+    return diff <= 60 * 24 * 60 * 60 * 1000;
+  }
+
+  function getStatusBadge(user: UserItem) {
+    return isUserActive(user)
       ? <span className="badge badge-success">Aktif</span>
       : <span className="badge badge-danger">Tidak Aktif</span>;
   }
@@ -511,7 +519,7 @@ export default function UsersPage() {
                             </td>
 
                             {/* Status */}
-                            <td>{getStatusBadge(user.subscriptionStatus)}</td>
+                            <td>{getStatusBadge(user)}</td>
 
                             {/* Aksi */}
                             <td className="sticky-col-body">
@@ -589,7 +597,7 @@ export default function UsersPage() {
                               <p className="text-xs text-[var(--text-muted)] truncate">{maskEmail(user.email)}</p>
                             </div>
                           </div>
-                          {user.subscriptionStatus === 'active' ? <span className="badge badge-success">Aktif</span> : <span className="badge badge-danger">Tidak Aktif</span>}
+                          {isUserActive(user) ? <span className="badge badge-success">Aktif</span> : <span className="badge badge-danger">Tidak Aktif</span>}
                         </div>
                         {user.tags && user.tags.length > 0 && (
                           <div className="flex flex-wrap gap-1 mb-3">

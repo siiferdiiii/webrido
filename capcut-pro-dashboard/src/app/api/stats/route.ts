@@ -17,7 +17,20 @@ export async function GET() {
       prisma.transaction.count(),
       prisma.user.count(),
       prisma.stockAccount.count({ where: { status: "available" } }),
-      prisma.user.count({ where: { subscriptionStatus: "active" } }),
+
+      // Pelanggan Aktif = user yang punya transaksi sukses dalam 60 hari terakhir
+      prisma.user.count({
+        where: {
+          transactions: {
+            some: {
+              status: "success",
+              purchaseDate: {
+                gte: new Date(Date.now() - 60 * 24 * 60 * 60 * 1000),
+              },
+            },
+          },
+        },
+      }),
 
       // 5 transaksi terbaru
       prisma.transaction.findMany({
