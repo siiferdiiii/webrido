@@ -23,6 +23,9 @@ import {
   Check,
   LayoutList,
   LayoutGrid,
+  SlidersHorizontal,
+  ChevronDown,
+  CalendarDays,
 } from "lucide-react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -73,7 +76,18 @@ const PRESET_COLORS = [
   "#14b8a6", "#06b6d4", "#3b82f6", "#6b7280",
 ];
 
-const BASE_FILTERS = ["Semua", "Aktif", "Tidak Aktif"];
+interface ActiveFilters {
+  status: 'all' | 'active' | 'inactive';
+  tagIds: string[];
+  lastTrxFrom: string;
+  lastTrxTo: string;
+  minTrx: string;
+  maxTrx: string;
+}
+
+const EMPTY_FILTERS: ActiveFilters = {
+  status: 'all', tagIds: [], lastTrxFrom: '', lastTrxTo: '', minTrx: '', maxTrx: '',
+};
 
 function formatDate(dateStr: string | null) {
   if (!dateStr) return "-";
@@ -90,12 +104,18 @@ export default function UsersPage() {
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
-  const [filter, setFilter] = useState("Semua");
   const [sortBy, setSortBy] = useState("terbaru");
+
+  // Advanced filter state
+  const [activeFilters, setActiveFilters] = useState<ActiveFilters>({ ...EMPTY_FILTERS });
+  const [draftFilters, setDraftFilters] = useState<ActiveFilters>({ ...EMPTY_FILTERS });
+  const [showFilterPanel, setShowFilterPanel] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
+  const [filterBtnRect, setFilterBtnRect] = useState<DOMRect | null>(null);
+  const filterBtnRef = useRef<HTMLButtonElement>(null);
 
   // Tag state
   const [allTags, setAllTags] = useState<TagItem[]>([]);
-  const [activeTagId, setActiveTagId] = useState<string | null>(null);
   const [showTagManager, setShowTagManager] = useState(false);
   const [newTagName, setNewTagName] = useState("");
   const [newTagColor, setNewTagColor] = useState("#818cf8");
@@ -140,15 +160,39 @@ export default function UsersPage() {
 
   // ─── Fetch Users ─────────────────────────────────────────────────────────────
 
+  // isMobile detector
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth < 768);
+    check();
+    window.addEventListener('resize', check);
+    return () => window.removeEventListener('resize', check);
+  }, []);
+
+  // Close filter panel on outside click
+  useEffect(() => {
+    if (!showFilterPanel || isMobile) return;
+    const close = (e: MouseEvent) => {
+      if (filterBtnRef.current && !filterBtnRef.current.closest('.filter-panel-wrapper')?.contains(e.target as Node)) {
+        setShowFilterPanel(false);
+      }
+    };
+    document.addEventListener('mousedown', close);
+    return () => document.removeEventListener('mousedown', close);
+  }, [showFilterPanel, isMobile]);
+
   const buildFilterParams = useCallback(() => {
     const params = new URLSearchParams();
     if (search) params.set("search", search);
-    if (filter === "Aktif") params.set("status", "active");
-    else if (filter === "Tidak Aktif") params.set("status", "inactive");
-    if (activeTagId) params.set("tagId", activeTagId);
+    if (activeFilters.status === "active") params.set("status", "active");
+    else if (activeFilters.status === "inactive") params.set("status", "inactive");
+    if (activeFilters.tagIds.length > 0) params.set("tagIds", activeFilters.tagIds.join(","));
+    if (activeFilters.lastTrxFrom) params.set("lastTrxFrom", activeFilters.lastTrxFrom);
+    if (activeFilters.lastTrxTo) params.set("lastTrxTo", activeFilters.lastTrxTo);
+    if (activeFilters.minTrx) params.set("minTrx", activeFilters.minTrx);
+    if (activeFilters.maxTrx) params.set("maxTrx", activeFilters.maxTrx);
     params.set("sortBy", sortBy);
     return params;
-  }, [search, filter, sortBy, activeTagId]);
+  }, [search, activeFilters, sortBy]);
 
   const fetchData = useCallback(() => {
     setLoading(true);
@@ -208,7 +252,8 @@ export default function UsersPage() {
     setDeletingTag(true);
     try {
       await fetch(`/api/tags/${deleteTagConfirm.id}`, { method: "DELETE" });
-      if (activeTagId === deleteTagConfirm.id) setActiveTagId(null);
+      // If any active filter uses this tag, remove it
+      setActiveFilters(f => ({ ...f, tagIds: f.tagIds.filter(id => id !== deleteTagConfirm.id) }));
       setDeleteTagConfirm(null);
       fetchTags();
       fetchData();
@@ -245,6 +290,14 @@ export default function UsersPage() {
 
   const allVisibleSelected = users.length > 0 && users.every((u) => selectedIds.has(u.id));
   const someSelected = selectedIds.size > 0;
+
+  // Count of active (non-default) filter categories
+  const activeFilterCount = [
+    activeFilters.status !== 'all',
+    activeFilters.tagIds.length > 0,
+    !!(activeFilters.lastTrxFrom || activeFilters.lastTrxTo),
+    !!(activeFilters.minTrx || activeFilters.maxTrx),
+  ].filter(Boolean).length;
 
   const toggleSelectAll = () => {
     if (allVisibleSelected) { setSelectedIds(new Set()); setSelectAllDB(false); }
@@ -358,43 +411,93 @@ export default function UsersPage() {
           </button>
         </div>
 
-        {/* ── Filter Pills: Base + Custom Tags ── */}
-        <div className="filter-pills-scroll">
-          <div className="filter-pills flex-nowrap">
-            {BASE_FILTERS.map((f) => (
-              <button
-                key={f}
-                className={`filter-pill flex-shrink-0 ${filter === f && !activeTagId ? "active" : ""}`}
-                onClick={() => { setFilter(f); setActiveTagId(null); }}
-              >
-                {f}
-              </button>
-            ))}
-            {allTags.length > 0 && (
-              <div className="w-px h-5 bg-[var(--border-color)] self-center mx-1 flex-shrink-0" />
-            )}
-            {allTags.map((tag) => (
-              <button
-                key={tag.id}
-                onClick={() => {
-                  if (activeTagId === tag.id) { setActiveTagId(null); setFilter("Semua"); }
-                  else { setActiveTagId(tag.id); setFilter("Semua"); }
-                }}
-                style={{
-                  borderColor: activeTagId === tag.id ? tag.color : undefined,
-                  background: activeTagId === tag.id ? `${tag.color}22` : undefined,
-                  color: activeTagId === tag.id ? tag.color : undefined,
-                }}
-                className="filter-pill flex items-center gap-1.5 flex-shrink-0"
-              >
-                <span
-                  className="inline-block w-2 h-2 rounded-full flex-shrink-0"
-                  style={{ background: tag.color }}
-                />
-                {tag.name}
-              </button>
-            ))}
+        {/* ── Filter Button + Active Chips ── */}
+        <div className="flex flex-col gap-3">
+          <div className="filter-pills-scroll">
+            <div className="flex items-center gap-2 flex-nowrap">
+
+              {/* ── Filter Button ── */}
+              <div className="relative filter-panel-wrapper flex-shrink-0">
+                <button
+                  ref={filterBtnRef}
+                  onClick={() => {
+                    if (!showFilterPanel) {
+                      setDraftFilters({ ...activeFilters });
+                      setFilterBtnRect(filterBtnRef.current?.getBoundingClientRect() || null);
+                    }
+                    setShowFilterPanel(p => !p);
+                  }}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 6,
+                    padding: '7px 14px', height: 38, borderRadius: 10,
+                    border: `1px solid ${activeFilterCount > 0 ? 'rgba(99,102,241,0.5)' : 'var(--border-color)'}`,
+                    background: activeFilterCount > 0 ? 'rgba(99,102,241,0.1)' : 'var(--bg-card)',
+                    color: activeFilterCount > 0 ? '#818cf8' : 'var(--text-secondary)',
+                    fontSize: 13, fontWeight: 500, cursor: 'pointer', transition: 'all 0.15s',
+                    flexShrink: 0,
+                  }}
+                >
+                  <SlidersHorizontal size={14} />
+                  Filter
+                  {activeFilterCount > 0 && (
+                    <span style={{
+                      minWidth: 18, height: 18, borderRadius: 9, padding: '0 4px',
+                      background: '#6366f1', color: 'white', fontSize: 10, fontWeight: 700,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    }}>{activeFilterCount}</span>
+                  )}
+                  <ChevronDown size={12} style={{ transform: showFilterPanel ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
+                </button>
+              </div>
+
+              {/* Quick status pills */}
+              {(['all', 'active', 'inactive'] as const).map((s) => (
+                <button
+                  key={s}
+                  onClick={() => setActiveFilters(f => ({ ...f, status: s }))}
+                  className={`filter-pill flex-shrink-0 ${activeFilters.status === s ? 'active' : ''}`}
+                >
+                  {s === 'all' ? 'Semua' : s === 'active' ? 'Aktif' : 'Tidak Aktif'}
+                </button>
+              ))}
+            </div>
           </div>
+
+          {/* Active filter chips */}
+          {activeFilterCount > 0 && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
+              {(activeFilters.lastTrxFrom || activeFilters.lastTrxTo) && (
+                <span style={{ display:'flex', alignItems:'center', gap:4, padding:'3px 10px', borderRadius:8, background:'rgba(99,102,241,0.1)', border:'1px solid rgba(99,102,241,0.25)', fontSize:11, color:'#a5b4fc' }}>
+                  <CalendarDays size={11} />
+                  {activeFilters.lastTrxFrom || '...'} → {activeFilters.lastTrxTo || '...'}
+                  <button onClick={() => setActiveFilters(f => ({ ...f, lastTrxFrom:'', lastTrxTo:'' }))} style={{marginLeft:2,cursor:'pointer',color:'inherit',opacity:0.7}}><X size={10}/></button>
+                </span>
+              )}
+              {(activeFilters.minTrx || activeFilters.maxTrx) && (
+                <span style={{ display:'flex', alignItems:'center', gap:4, padding:'3px 10px', borderRadius:8, background:'rgba(34,211,238,0.08)', border:'1px solid rgba(34,211,238,0.2)', fontSize:11, color:'#67e8f9' }}>
+                  TRX {activeFilters.minTrx || '0'} – {activeFilters.maxTrx || '∞'}
+                  <button onClick={() => setActiveFilters(f => ({ ...f, minTrx:'', maxTrx:'' }))} style={{marginLeft:2,cursor:'pointer',color:'inherit',opacity:0.7}}><X size={10}/></button>
+                </span>
+              )}
+              {activeFilters.tagIds.map(tid => {
+                const tag = allTags.find(t => t.id === tid);
+                if (!tag) return null;
+                return (
+                  <span key={tid} style={{ display:'flex', alignItems:'center', gap:4, padding:'3px 10px', borderRadius:8, background:`${tag.color}15`, border:`1px solid ${tag.color}33`, fontSize:11, color:tag.color }}>
+                    <span style={{ width:7, height:7, borderRadius:'50%', background:tag.color }} />
+                    {tag.name}
+                    <button onClick={() => setActiveFilters(f => ({ ...f, tagIds: f.tagIds.filter(id=>id!==tid) }))} style={{marginLeft:2,cursor:'pointer',color:'inherit',opacity:0.7}}><X size={10}/></button>
+                  </span>
+                );
+              })}
+              <button
+                onClick={() => setActiveFilters({ ...EMPTY_FILTERS })}
+                style={{ padding:'3px 8px', borderRadius:6, fontSize:11, color:'var(--text-muted)', border:'1px solid rgba(255,255,255,0.08)', background:'transparent', cursor:'pointer' }}
+              >
+                Hapus semua
+              </button>
+            </div>
+          )}
         </div>
 
         {/* View Toggle mobile */}
@@ -1015,6 +1118,182 @@ export default function UsersPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* ════════════════════════════════════════════
+          FILTER PANEL — Desktop Dropdown + Mobile Bottom Sheet
+      ════════════════════════════════════════════ */}
+      {showFilterPanel && (
+        <>
+          {/* Backdrop */}
+          <div
+            onClick={() => setShowFilterPanel(false)}
+            style={{
+              position: 'fixed', inset: 0, zIndex: 44,
+              background: isMobile ? 'rgba(0,0,0,0.55)' : 'transparent',
+            }}
+          />
+
+          {/* Panel */}
+          <div
+            onClick={e => e.stopPropagation()}
+            style={isMobile ? {
+              position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 45,
+              borderRadius: '20px 20px 0 0', maxHeight: '88vh', overflowY: 'auto',
+              background: 'rgba(13,15,27,0.99)', border: '1px solid rgba(99,102,241,0.2)',
+              backdropFilter: 'blur(20px)',
+            } : filterBtnRect ? {
+              position: 'fixed',
+              top: filterBtnRect.bottom + 8,
+              left: Math.min(filterBtnRect.left, window.innerWidth - 396),
+              width: 388, zIndex: 45, borderRadius: 16,
+              background: 'rgba(13,15,27,0.99)', border: '1px solid rgba(99,102,241,0.25)',
+              backdropFilter: 'blur(20px)', boxShadow: '0 24px 64px rgba(0,0,0,0.7)',
+              maxHeight: 'calc(100vh - 120px)', overflowY: 'auto',
+            } : undefined}
+          >
+            {/* Header */}
+            <div style={{ padding:'16px 20px', borderBottom:'1px solid rgba(99,102,241,0.12)', display:'flex', alignItems:'center', justifyContent:'space-between', position:'sticky', top:0, background:'rgba(13,15,27,0.99)', zIndex:1 }}>
+              <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                <SlidersHorizontal size={15} style={{ color:'#818cf8' }} />
+                <span style={{ fontWeight:600, color:'white', fontSize:15 }}>Filter Pelanggan</span>
+              </div>
+              <button className="btn-icon" onClick={() => setShowFilterPanel(false)}><X size={16} /></button>
+            </div>
+
+            <div style={{ padding:'20px', display:'flex', flexDirection:'column', gap:22 }}>
+
+              {/* Status */}
+              <div>
+                <p style={{ fontSize:11, fontWeight:600, color:'var(--text-muted)', textTransform:'uppercase', letterSpacing:'0.08em', marginBottom:10 }}>Status Pelanggan</p>
+                <div style={{ display:'flex', gap:6 }}>
+                  {([{v:'all',l:'Semua'},{v:'active',l:'Aktif'},{v:'inactive',l:'Tidak Aktif'}] as const).map(opt => (
+                    <button
+                      key={opt.v}
+                      onClick={() => setDraftFilters(f => ({ ...f, status: opt.v }))}
+                      style={{
+                        padding:'6px 16px', borderRadius:8, fontSize:12, fontWeight:600,
+                        border:'1px solid', cursor:'pointer', transition:'all 0.15s',
+                        background: draftFilters.status === opt.v ? 'rgba(99,102,241,0.2)' : 'transparent',
+                        borderColor: draftFilters.status === opt.v ? 'rgba(99,102,241,0.5)' : 'rgba(255,255,255,0.1)',
+                        color: draftFilters.status === opt.v ? '#818cf8' : 'var(--text-muted)',
+                      }}
+                    >{opt.l}</button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Pembelian Terakhir */}
+              <div>
+                <p style={{ fontSize:11, fontWeight:600, color:'var(--text-muted)', textTransform:'uppercase', letterSpacing:'0.08em', marginBottom:10 }}>Pembelian Terakhir</p>
+                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
+                  <div>
+                    <label style={{ fontSize:11, color:'var(--text-muted)', marginBottom:5, display:'block' }}>Dari tanggal</label>
+                    <input
+                      type="date" className="form-input"
+                      style={{ fontSize:12, padding:'7px 10px' }}
+                      value={draftFilters.lastTrxFrom}
+                      onChange={e => setDraftFilters(f => ({ ...f, lastTrxFrom: e.target.value }))}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ fontSize:11, color:'var(--text-muted)', marginBottom:5, display:'block' }}>Sampai tanggal</label>
+                    <input
+                      type="date" className="form-input"
+                      style={{ fontSize:12, padding:'7px 10px' }}
+                      value={draftFilters.lastTrxTo}
+                      onChange={e => setDraftFilters(f => ({ ...f, lastTrxTo: e.target.value }))}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Total Transaksi */}
+              <div>
+                <p style={{ fontSize:11, fontWeight:600, color:'var(--text-muted)', textTransform:'uppercase', letterSpacing:'0.08em', marginBottom:10 }}>Total Transaksi</p>
+                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
+                  <div>
+                    <label style={{ fontSize:11, color:'var(--text-muted)', marginBottom:5, display:'block' }}>Minimal (≥)</label>
+                    <input
+                      type="number" className="form-input"
+                      style={{ fontSize:12, padding:'7px 10px' }}
+                      placeholder="0" min="0"
+                      value={draftFilters.minTrx}
+                      onChange={e => setDraftFilters(f => ({ ...f, minTrx: e.target.value }))}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ fontSize:11, color:'var(--text-muted)', marginBottom:5, display:'block' }}>Maksimal (≤)</label>
+                    <input
+                      type="number" className="form-input"
+                      style={{ fontSize:12, padding:'7px 10px' }}
+                      placeholder="∞" min="0"
+                      value={draftFilters.maxTrx}
+                      onChange={e => setDraftFilters(f => ({ ...f, maxTrx: e.target.value }))}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Tag Multi-select */}
+              {allTags.length > 0 && (
+                <div>
+                  <p style={{ fontSize:11, fontWeight:600, color:'var(--text-muted)', textTransform:'uppercase', letterSpacing:'0.08em', marginBottom:10 }}>Tag</p>
+                  <div style={{ display:'flex', flexDirection:'column', gap:5, maxHeight:180, overflowY:'auto' }}>
+                    {allTags.map(tag => {
+                      const selected = draftFilters.tagIds.includes(tag.id);
+                      return (
+                        <button
+                          key={tag.id}
+                          onClick={() => setDraftFilters(f => ({
+                            ...f,
+                            tagIds: selected ? f.tagIds.filter(id=>id!==tag.id) : [...f.tagIds, tag.id],
+                          }))}
+                          style={{
+                            display:'flex', alignItems:'center', gap:10, padding:'9px 12px',
+                            borderRadius:9, cursor:'pointer', width:'100%', textAlign:'left',
+                            border:'1px solid', transition:'all 0.15s',
+                            borderColor: selected ? `${tag.color}55` : 'rgba(255,255,255,0.07)',
+                            background: selected ? `${tag.color}18` : 'rgba(255,255,255,0.02)',
+                          }}
+                        >
+                          {/* Checkbox */}
+                          <span style={{
+                            width:15, height:15, borderRadius:4, flexShrink:0,
+                            border: selected ? `2px solid ${tag.color}` : '2px solid rgba(255,255,255,0.2)',
+                            background: selected ? tag.color : 'transparent',
+                            display:'flex', alignItems:'center', justifyContent:'center',
+                          }}>
+                            {selected && <Check size={9} style={{ color:'white' }} />}
+                          </span>
+                          <span style={{ width:10, height:10, borderRadius:'50%', background:tag.color, flexShrink:0 }} />
+                          <span style={{ fontSize:13, color: selected ? 'white' : 'var(--text-secondary)', flex:1 }}>{tag.name}</span>
+                          {tag._count && <span style={{ fontSize:10, color:'var(--text-muted)' }}>{tag._count.customers}</span>}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div style={{ padding:'14px 20px', borderTop:'1px solid rgba(99,102,241,0.1)', display:'flex', gap:8, justifyContent:'space-between', position:'sticky', bottom:0, background:'rgba(13,15,27,0.99)' }}>
+              <button
+                className="btn-secondary"
+                onClick={() => setDraftFilters({ ...EMPTY_FILTERS })}
+              >
+                Reset
+              </button>
+              <button
+                className="btn-primary"
+                onClick={() => { setActiveFilters({ ...draftFilters }); setShowFilterPanel(false); }}
+              >
+                <Check size={14} /> Terapkan Filter
+              </button>
+            </div>
+          </div>
+        </>
       )}
     </>
   );

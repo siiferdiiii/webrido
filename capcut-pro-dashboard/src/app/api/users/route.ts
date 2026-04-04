@@ -8,13 +8,12 @@ export async function GET(req: NextRequest) {
     const search = searchParams.get("search") || "";
     const status = searchParams.get("status") || "";
     const followUp = searchParams.get("followUp") || "";
-    const tagId = searchParams.get("tagId") || "";
     const sortBy = searchParams.get("sortBy") || "terbaru";
     const page = parseInt(searchParams.get("page") || "1");
     const limit = parseInt(searchParams.get("limit") || "20");
     const skip = (page - 1) * limit;
 
-    // Fetch semua user berdasarkan filter tanpa paginasi (untuk export follow-up)
+    // Fetch semua user tanpa paginasi (untuk export follow-up)
     const allUsers = searchParams.get("allUsers") === "1";
 
     // Fetch user spesifik berdasarkan IDs
@@ -28,6 +27,20 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ users, total: users.length });
     }
 
+    // ── Advanced filter params ──────────────────────────────────────────────
+    const tagIds = (searchParams.get("tagIds") || "").split(",").filter(Boolean);
+    // Backward compat: single tagId param
+    const tagIdSingle = searchParams.get("tagId") || "";
+    if (tagIdSingle && !tagIds.includes(tagIdSingle)) tagIds.push(tagIdSingle);
+
+    const lastTrxFrom = searchParams.get("lastTrxFrom") || ""; // YYYY-MM-DD
+    const lastTrxTo = searchParams.get("lastTrxTo") || "";     // YYYY-MM-DD
+    const minTrx = parseInt(searchParams.get("minTrx") || "") || 0;
+    const maxTrx = parseInt(searchParams.get("maxTrx") || "") || 0;
+
+    // Count-based filters require in-memory filtering (Prisma doesn't support _count in WHERE)
+    const needsInMemory = minTrx > 0 || maxTrx > 0;
+
     const where: Record<string, unknown> = {};
 
     if (search) {
@@ -38,15 +51,13 @@ export async function GET(req: NextRequest) {
       ];
     }
 
+    // ── Status filter (60-day dynamic) ────────────────────────────────────────
     const sixtyDaysAgo = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000);
-
     if (status === "active") {
-      // Aktif = punya transaksi sukses dalam 60 hari terakhir
       where.transactions = {
         some: { status: "success", purchaseDate: { gte: sixtyDaysAgo } },
       };
     } else if (status === "inactive") {
-      // Tidak Aktif = tidak punya transaksi sukses dalam 60 hari terakhir
       where.transactions = {
         none: { status: "success", purchaseDate: { gte: sixtyDaysAgo } },
       };
@@ -56,22 +67,43 @@ export async function GET(req: NextRequest) {
       where.followUpStatus = followUp;
     }
 
-    if (tagId) {
-      where.tags = { some: { tagId } };
+    // ── Multi-tag filter ──────────────────────────────────────────────────────
+    if (tagIds.length > 0) {
+      where.tags = { some: { tagId: { in: tagIds } } };
     }
 
-    // Tentukan order by awal untuk Prisma
-    let orderBy: any = { createdAt: "desc" };
-
-    if (sortBy === "total_trx_desc") {
-      orderBy = { transactions: { _count: "desc" } };
-    } else if (sortBy === "total_trx_asc") {
-      orderBy = { transactions: { _count: "asc" } };
-    } else if (sortBy === "terlama") {
-      orderBy = { createdAt: "asc" };
+    // ── Last transaction date range ───────────────────────────────────────────
+    // Filter users whose LAST transaction date is in [from, to].
+    // Logic: has SOME success transaction >= from AND NONE > to
+    if (lastTrxFrom || lastTrxTo) {
+      const andConditions: Record<string, unknown>[] = [];
+      if (lastTrxFrom) {
+        const from = new Date(lastTrxFrom + "T00:00:00");
+        andConditions.push({
+          transactions: { some: { status: "success", purchaseDate: { gte: from } } },
+        });
+      }
+      if (lastTrxTo) {
+        const to = new Date(lastTrxTo + "T23:59:59");
+        andConditions.push({
+          transactions: { none: { status: "success", purchaseDate: { gt: to } } },
+        });
+      }
+      if (andConditions.length > 0) {
+        where.AND = andConditions;
+      }
     }
 
-    // Jika allUsers=1, ambil semua tanpa paginasi (hanya field yang diperlukan untuk follow-up)
+    // ── Order by ─────────────────────────────────────────────────────────────
+    let orderBy: Record<string, unknown> | Record<string, unknown>[] = { createdAt: "desc" };
+    if (sortBy === "total_trx_desc") orderBy = { transactions: { _count: "desc" } };
+    else if (sortBy === "total_trx_asc") orderBy = { transactions: { _count: "asc" } };
+    else if (sortBy === "terlama") orderBy = { createdAt: "asc" };
+
+    const needsManualPagination =
+      sortBy === "last_trx_desc" || sortBy === "last_trx_asc" || needsInMemory;
+
+    // ── allUsers mode: no pagination ──────────────────────────────────────────
     if (allUsers) {
       const users = await prisma.user.findMany({
         where,
@@ -81,6 +113,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ users, total: users.length });
     }
 
+    // ── Fetch data ────────────────────────────────────────────────────────────
     const [users, total] = await Promise.all([
       prisma.user.findMany({
         where,
@@ -91,34 +124,53 @@ export async function GET(req: NextRequest) {
             select: { purchaseDate: true, warrantyExpiredAt: true },
           },
           _count: { select: { transactions: true } },
-          tags: {
-            include: { tag: true },
-            orderBy: { assignedAt: "asc" },
-          },
+          tags: { include: { tag: true }, orderBy: { assignedAt: "asc" } },
         },
         orderBy,
-        skip: (sortBy === "last_trx_desc" || sortBy === "last_trx_asc") ? undefined : skip,
-        take: (sortBy === "last_trx_desc" || sortBy === "last_trx_asc") ? undefined : limit,
+        skip: needsManualPagination ? undefined : skip,
+        take: needsManualPagination ? undefined : limit,
       }),
       prisma.user.count({ where }),
     ]);
 
-    // Jika sorting by last transaction date, terpaksa lakukan manual di memory karena Prisma
-    // tidak support orderBy dari tabel relasi array hasMany() secara langsung
+    // ── In-memory filtering & sorting ─────────────────────────────────────────
     let finalUsers = users;
 
+    // Filter by transaction count
+    if (needsInMemory) {
+      finalUsers = finalUsers.filter((u) => {
+        const count = u._count.transactions;
+        if (minTrx > 0 && count < minTrx) return false;
+        if (maxTrx > 0 && count > maxTrx) return false;
+        return true;
+      });
+    }
+
+    // Sort by last transaction date
     if (sortBy === "last_trx_desc" || sortBy === "last_trx_asc") {
       finalUsers.sort((a, b) => {
         const dateA = a.transactions[0]?.purchaseDate ? new Date(a.transactions[0].purchaseDate).getTime() : 0;
         const dateB = b.transactions[0]?.purchaseDate ? new Date(b.transactions[0].purchaseDate).getTime() : 0;
-
         return sortBy === "last_trx_desc" ? dateB - dateA : dateA - dateB;
       });
-      // Paginasi manual
+    }
+
+    // Manual pagination
+    if (needsManualPagination) {
       finalUsers = finalUsers.slice(skip, skip + limit);
     }
 
-    return NextResponse.json({ users: finalUsers, total, page, limit });
+    // Effective total (accounting for in-memory count filter)
+    const effectiveTotal = needsInMemory
+      ? users.filter((u) => {
+          const count = u._count.transactions;
+          if (minTrx > 0 && count < minTrx) return false;
+          if (maxTrx > 0 && count > maxTrx) return false;
+          return true;
+        }).length
+      : total;
+
+    return NextResponse.json({ users: finalUsers, total: effectiveTotal, page, limit });
   } catch (error) {
     console.error("GET /api/users error:", error);
     return NextResponse.json({ error: "Gagal mengambil data user" }, { status: 500 });
