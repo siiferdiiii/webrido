@@ -148,9 +148,10 @@ export default function UsersPage() {
   const [loadingTransactions, setLoadingTransactions] = useState(false);
   const [viewMode, setViewMode] = useState<'table' | 'card'>('table');
 
-  // Tag popover draft state (untuk save flow)
-  const [tagDraft, setTagDraft] = useState<Set<string>>(new Set());
-  const [savingTags, setSavingTags] = useState(false);
+  // Tag popover draft state - multi-user pending changes
+  // Map<userId, { draft: Set<tagId>, original: Set<tagId> }>
+  const [pendingTagChanges, setPendingTagChanges] = useState<Map<string, { draft: Set<string>; original: Set<string> }>>(new Map());
+  const [savingAllTags, setSavingAllTags] = useState(false);
 
   const formatCurrency = (amount: number) =>
     new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", minimumFractionDigits: 0 }).format(amount);
@@ -374,7 +375,37 @@ export default function UsersPage() {
 
   const selectionCount = selectAllDB ? total : selectedIds.size;
 
-  // ─── Render ───────────────────────────────────────────────────────────────────
+  // ─── Save All Pending Tag Changes ──────────────────────────────────────────
+
+  const handleSaveAllTags = async () => {
+    setSavingAllTags(true);
+    try {
+      const promises: Promise<unknown>[] = [];
+      for (const [userId, { draft, original }] of pendingTagChanges) {
+        const toAdd = [...draft].filter(id => !original.has(id));
+        const toRemove = [...original].filter(id => !draft.has(id));
+        toAdd.forEach(tagId => promises.push(
+          fetch(`/api/users/${userId}/tags`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ tagId }),
+          })
+        ));
+        toRemove.forEach(tagId => promises.push(
+          fetch(`/api/users/${userId}/tags`, {
+            method: 'DELETE', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ tagId }),
+          })
+        ));
+      }
+      await Promise.all(promises);
+      setPendingTagChanges(new Map());
+      fetchData();
+    } finally {
+      setSavingAllTags(false);
+    }
+  };
+
+  // ─── Render ─────────────────────────────────────────────────────────────────
 
   return (
     <>
@@ -415,6 +446,29 @@ export default function UsersPage() {
             <TagIcon size={15} />
             Kelola Tag
           </button>
+
+          {/* Simpan Tag (N) - muncul saat ada pending changes */}
+          {pendingTagChanges.size > 0 && (
+            <button
+              onClick={handleSaveAllTags}
+              disabled={savingAllTags}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 6,
+                padding: '0 14px', height: 38, borderRadius: 12,
+                background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+                border: 'none', color: 'white', fontSize: 13, fontWeight: 600,
+                cursor: savingAllTags ? 'wait' : 'pointer',
+                boxShadow: '0 4px 16px rgba(99,102,241,0.35)',
+                animation: 'pulse-glow 2s ease-in-out infinite',
+                flexShrink: 0,
+              }}
+            >
+              {savingAllTags
+                ? <Loader2 size={14} className="animate-spin" />
+                : <Save size={14} />}
+              Simpan Tag ({pendingTagChanges.size} user)
+            </button>
+          )}
         </div>
 
         {/* ── Filter Button + Active Chips ── */}
@@ -662,21 +716,32 @@ export default function UsersPage() {
                                         right: window.innerWidth - rect.right,
                                       });
                                       setTagPopoverUserId(user.id);
-                                      // Init draft dengan tag user saat ini
-                                      setTagDraft(new Set(user.tags?.map(t => t.tag.id) || []));
+                                      // Init draft dari pending atau dari tag user saat ini
+                                      if (!pendingTagChanges.has(user.id)) {
+                                        const originalIds = new Set(user.tags?.map(t => t.tag.id) || []);
+                                        setPendingTagChanges(prev => {
+                                          const next = new Map(prev);
+                                          next.set(user.id, { draft: new Set(originalIds), original: new Set(originalIds) });
+                                          return next;
+                                        });
+                                      }
                                     }
                                   }}
                                   className="flex items-center gap-1.5 px-2 py-1 rounded-lg text-xs font-medium transition-all"
                                   style={{
                                     height: 28,
-                                    background: isPopoverOpen ? "rgba(129,140,248,0.2)" : "rgba(129,140,248,0.08)",
-                                    border: "1px solid rgba(129,140,248,0.3)",
-                                    color: "#818cf8",
+                                    background: isPopoverOpen ? "rgba(129,140,248,0.2)" : pendingTagChanges.has(user.id) ? "rgba(251,191,36,0.15)" : "rgba(129,140,248,0.08)",
+                                    border: `1px solid ${pendingTagChanges.has(user.id) ? 'rgba(251,191,36,0.4)' : 'rgba(129,140,248,0.3)'}`,
+                                    color: pendingTagChanges.has(user.id) ? '#fbbf24' : '#818cf8',
+                                    position: 'relative',
                                   }}
                                   title="Kelola tag pelanggan ini"
                                 >
                                   <Tag size={12} />
                                   Tag
+                                  {pendingTagChanges.has(user.id) && (
+                                    <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#fbbf24', position: 'absolute', top: 3, right: 3 }} />
+                                  )}
                                 </button>
                               </div>
                             </td>
@@ -823,14 +888,19 @@ export default function UsersPage() {
           {(() => {
             const popUser = users.find(u => u.id === tagPopoverUserId);
             if (!popUser) return null;
+            const userPending = pendingTagChanges.get(popUser.id);
+            const currentDraft = userPending?.draft ?? new Set(popUser.tags?.map(t => t.tag.id) || []);
             return (
               <>
                 {/* Header */}
                 <div className="px-3 py-2.5 border-b border-[var(--border-color)] flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <Tag size={13} className="text-[#818cf8]" />
-                    <p className="text-xs font-semibold text-white">Tag — {popUser.name.split(" ")[0]}</p>
+                    <p className="text-xs font-semibold text-white">{popUser.name.split(" ")[0]}</p>
                   </div>
+                  {userPending && (
+                    <span style={{ fontSize: 9, padding: '2px 6px', borderRadius: 6, background: 'rgba(251,191,36,0.15)', color: '#fbbf24', border: '1px solid rgba(251,191,36,0.3)', fontWeight: 600 }}>UNSAVED</span>
+                  )}
                 </div>
 
                 {allTags.length === 0 ? (
@@ -846,21 +916,25 @@ export default function UsersPage() {
                 ) : (
                   <div className="py-1 max-h-52 overflow-y-auto">
                     {allTags.map((tag) => {
-                      const isChecked = tagDraft.has(tag.id);
+                      const isChecked = currentDraft.has(tag.id);
                       return (
                         <button
                           key={tag.id}
                           onClick={() => {
-                            setTagDraft(prev => {
-                              const next = new Set(prev);
-                              if (next.has(tag.id)) next.delete(tag.id);
-                              else next.add(tag.id);
+                            setPendingTagChanges(prev => {
+                              const next = new Map(prev);
+                              const originalIds = new Set(popUser.tags?.map(t => t.tag.id) || []);
+                              const existing = next.get(popUser.id);
+                              const draft = new Set(existing?.draft ?? originalIds);
+                              const original = existing?.original ?? new Set(originalIds);
+                              if (draft.has(tag.id)) draft.delete(tag.id);
+                              else draft.add(tag.id);
+                              next.set(popUser.id, { draft, original });
                               return next;
                             });
                           }}
                           className="w-full flex items-center gap-2.5 px-3 py-2.5 text-sm hover:bg-white/5 transition-colors text-left"
                         >
-                          {/* Checkbox visual */}
                           <span style={{
                             width: 14, height: 14, borderRadius: 4, flexShrink: 0,
                             border: isChecked ? `2px solid ${tag.color}` : '2px solid rgba(255,255,255,0.2)',
@@ -878,50 +952,16 @@ export default function UsersPage() {
                   </div>
                 )}
 
-                {/* Footer: Save + Buat Tag */}
-                <div className="px-3 py-2.5 border-t border-[var(--border-color)] flex items-center gap-2">
-                  <button
-                    disabled={savingTags}
-                    onClick={async () => {
-                      const popUser2 = users.find(u => u.id === tagPopoverUserId);
-                      if (!popUser2) return;
-                      setSavingTags(true);
-                      try {
-                        const currentTagIds = new Set(popUser2.tags?.map(t => t.tag.id) || []);
-                        // Tags to add
-                        const toAdd = [...tagDraft].filter(id => !currentTagIds.has(id));
-                        // Tags to remove
-                        const toRemove = [...currentTagIds].filter(id => !tagDraft.has(id));
-                        await Promise.all([
-                          ...toAdd.map(tagId => fetch(`/api/users/${popUser2.id}/tags`, {
-                            method: 'POST', headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ tagId }),
-                          })),
-                          ...toRemove.map(tagId => fetch(`/api/users/${popUser2.id}/tags`, {
-                            method: 'DELETE', headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ tagId }),
-                          })),
-                        ]);
-                        fetchData();
-                        setTagPopoverUserId(null);
-                        setTagPopoverPos(null);
-                      } finally {
-                        setSavingTags(false);
-                      }
-                    }}
-                    className="btn-primary flex-1 flex items-center justify-center gap-1.5"
-                    style={{ height: 32, fontSize: 12, borderRadius: 8 }}
-                  >
-                    {savingTags ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}
-                    Simpan Tag
-                  </button>
+                {/* Footer hint */}
+                <div className="px-3 py-2 border-t border-[var(--border-color)] flex items-center justify-between">
+                  <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>Klik ✔ Simpan Tag di atas</span>
                   <button
                     onClick={() => { setShowTagManager(true); setTagPopoverUserId(null); setTagPopoverPos(null); }}
                     className="btn-icon"
-                    style={{ height: 32, width: 32 }}
+                    style={{ width: 24, height: 24 }}
                     title="Buat tag baru"
                   >
-                    <Plus size={13} />
+                    <Plus size={12} />
                   </button>
                 </div>
               </>
