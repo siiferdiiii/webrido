@@ -26,6 +26,9 @@ import {
   SlidersHorizontal,
   ChevronDown,
   CalendarDays,
+  ChevronLeft,
+  ChevronRight,
+  Save,
 } from "lucide-react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -134,12 +137,20 @@ export default function UsersPage() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [selectAllDB, setSelectAllDB] = useState(false);
 
+  // Pagination
+  const [page, setPage] = useState(1);
+  const limit = 60;
+
   // Modal State
   const [showModal, setShowModal] = useState(false);
   const [selectedUser, setSelectedUser] = useState<UserItem | null>(null);
   const [userTransactions, setUserTransactions] = useState<TransactionHistory[]>([]);
   const [loadingTransactions, setLoadingTransactions] = useState(false);
   const [viewMode, setViewMode] = useState<'table' | 'card'>('table');
+
+  // Tag popover draft state (untuk save flow)
+  const [tagDraft, setTagDraft] = useState<Set<string>>(new Set());
+  const [savingTags, setSavingTags] = useState(false);
 
   const formatCurrency = (amount: number) =>
     new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", minimumFractionDigits: 0 }).format(amount);
@@ -179,8 +190,10 @@ export default function UsersPage() {
     if (activeFilters.minTrx) params.set("minTrx", activeFilters.minTrx);
     if (activeFilters.maxTrx) params.set("maxTrx", activeFilters.maxTrx);
     params.set("sortBy", sortBy);
+    params.set("page", String(page));
+    params.set("limit", String(limit));
     return params;
-  }, [search, activeFilters, sortBy]);
+  }, [search, activeFilters, sortBy, page, limit]);
 
   const fetchData = useCallback(() => {
     setLoading(true);
@@ -195,6 +208,11 @@ export default function UsersPage() {
   }, [buildFilterParams]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
+
+  // Reset ke page 1 saat filter/search berubah
+  useEffect(() => { setPage(1); }, [search, activeFilters, sortBy]);
+
+  const totalPages = Math.ceil(total / limit);
 
   // Close popover on outside click or scroll
   useEffect(() => {
@@ -644,6 +662,8 @@ export default function UsersPage() {
                                         right: window.innerWidth - rect.right,
                                       });
                                       setTagPopoverUserId(user.id);
+                                      // Init draft dengan tag user saat ini
+                                      setTagDraft(new Set(user.tags?.map(t => t.tag.id) || []));
                                     }
                                   }}
                                   className="flex items-center gap-1.5 px-2 py-1 rounded-lg text-xs font-medium transition-all"
@@ -716,8 +736,69 @@ export default function UsersPage() {
                 </div>
               )}
 
-              <div className="flex items-center justify-between px-4 md:px-6 py-4 border-t border-[rgba(99,102,241,0.08)]">
-                <p className="text-sm text-[var(--text-muted)]">Total {total} pelanggan</p>
+              {/* ── Footer Pagination ── */}
+              <div className="flex items-center justify-between px-4 md:px-6 py-4 border-t border-[rgba(99,102,241,0.08)] flex-wrap gap-3">
+                <p className="text-sm text-[var(--text-muted)]">
+                  Menampilkan {users.length} dari <span className="font-semibold text-white">{total}</span> pelanggan
+                  {totalPages > 1 && <span className="ml-1">(Hal. {page}/{totalPages})</span>}
+                </p>
+                {totalPages > 1 && (
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => setPage(1)}
+                      disabled={page === 1}
+                      className="btn-icon"
+                      style={{ width: 30, height: 30, opacity: page === 1 ? 0.35 : 1 }}
+                      title="Halaman pertama"
+                    >
+                      <ChevronLeft size={12} />  <ChevronLeft size={12} style={{marginLeft:-6}} />
+                    </button>
+                    <button
+                      onClick={() => setPage(p => Math.max(1, p - 1))}
+                      disabled={page === 1}
+                      className="btn-icon"
+                      style={{ width: 32, height: 32, opacity: page === 1 ? 0.35 : 1 }}
+                    >
+                      <ChevronLeft size={14} />
+                    </button>
+                    {/* Page number pills */}
+                    {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                      // Windowed page numbers
+                      let start = Math.max(1, page - 2);
+                      if (start + 4 > totalPages) start = Math.max(1, totalPages - 4);
+                      return start + i;
+                    }).map(p => (
+                      <button
+                        key={p}
+                        onClick={() => setPage(p)}
+                        style={{
+                          minWidth: 32, height: 32, borderRadius: 8, fontSize: 12, fontWeight: p === page ? 700 : 400,
+                          background: p === page ? 'rgba(99,102,241,0.25)' : 'transparent',
+                          border: `1px solid ${p === page ? 'rgba(99,102,241,0.5)' : 'rgba(255,255,255,0.07)'}`,
+                          color: p === page ? '#818cf8' : 'var(--text-muted)',
+                          cursor: 'pointer', transition: 'all 0.15s',
+                        }}
+                      >{p}</button>
+                    ))}
+                    <button
+                      onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                      disabled={page === totalPages}
+                      className="btn-icon"
+                      style={{ width: 32, height: 32, opacity: page === totalPages ? 0.35 : 1 }}
+                    >
+                      <ChevronRight size={14} />
+                    </button>
+                    <button
+                      onClick={() => setPage(totalPages)}
+                      disabled={page === totalPages}
+                      className="btn-icon"
+                      style={{ width: 30, height: 30, opacity: page === totalPages ? 0.35 : 1 }}
+                      title="Halaman terakhir"
+                    >
+                      <ChevronRight size={12} /><ChevronRight size={12} style={{marginLeft:-6}} />
+                    </button>
+                  </div>
+                )}
               </div>
             </>
           )}
@@ -728,7 +809,7 @@ export default function UsersPage() {
       {tagPopoverUserId && tagPopoverPos && typeof window !== 'undefined' && createPortal(
         <div
           ref={popoverRef}
-          className="w-52 rounded-xl border border-[var(--border-color)] shadow-2xl overflow-hidden"
+          className="w-56 rounded-xl border border-[var(--border-color)] shadow-2xl overflow-hidden"
           style={{
             position: 'fixed',
             top: tagPopoverPos.top,
@@ -742,13 +823,16 @@ export default function UsersPage() {
           {(() => {
             const popUser = users.find(u => u.id === tagPopoverUserId);
             if (!popUser) return null;
-            const popUserTagIds = new Set(popUser.tags?.map((t) => t.tag.id) || []);
             return (
               <>
-                <div className="px-3 py-2.5 border-b border-[var(--border-color)] flex items-center gap-2">
-                  <Tag size={13} className="text-[#818cf8]" />
-                  <p className="text-xs font-semibold text-white">Tag untuk {popUser.name.split(" ")[0]}</p>
+                {/* Header */}
+                <div className="px-3 py-2.5 border-b border-[var(--border-color)] flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Tag size={13} className="text-[#818cf8]" />
+                    <p className="text-xs font-semibold text-white">Tag — {popUser.name.split(" ")[0]}</p>
+                  </div>
                 </div>
+
                 {allTags.length === 0 ? (
                   <div className="px-3 py-4 text-xs text-[var(--text-muted)] text-center">
                     Belum ada tag.<br />
@@ -762,34 +846,82 @@ export default function UsersPage() {
                 ) : (
                   <div className="py-1 max-h-52 overflow-y-auto">
                     {allTags.map((tag) => {
-                      const has = popUserTagIds.has(tag.id);
-                      const isToggling = togglingTag === tag.id;
+                      const isChecked = tagDraft.has(tag.id);
                       return (
                         <button
                           key={tag.id}
-                          onClick={() => toggleTagOnUser(popUser.id, tag.id, has)}
-                          disabled={isToggling}
+                          onClick={() => {
+                            setTagDraft(prev => {
+                              const next = new Set(prev);
+                              if (next.has(tag.id)) next.delete(tag.id);
+                              else next.add(tag.id);
+                              return next;
+                            });
+                          }}
                           className="w-full flex items-center gap-2.5 px-3 py-2.5 text-sm hover:bg-white/5 transition-colors text-left"
                         >
+                          {/* Checkbox visual */}
+                          <span style={{
+                            width: 14, height: 14, borderRadius: 4, flexShrink: 0,
+                            border: isChecked ? `2px solid ${tag.color}` : '2px solid rgba(255,255,255,0.2)',
+                            background: isChecked ? tag.color : 'transparent',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            transition: 'all 0.15s',
+                          }}>
+                            {isChecked && <Check size={9} style={{ color: 'white' }} />}
+                          </span>
                           <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ background: tag.color }} />
                           <span className="flex-1 text-[var(--text-secondary)]">{tag.name}</span>
-                          {isToggling
-                            ? <Loader2 size={13} className="animate-spin text-[var(--text-muted)]" />
-                            : has
-                              ? <span className="flex items-center gap-1 text-[11px] font-semibold text-[#22c55e]"><Check size={11} /> Aktif</span>
-                              : <span className="text-[11px] text-[var(--text-muted)]">Tambah</span>
-                          }
                         </button>
                       );
                     })}
                   </div>
                 )}
-                <div className="px-3 py-2 border-t border-[var(--border-color)]">
+
+                {/* Footer: Save + Buat Tag */}
+                <div className="px-3 py-2.5 border-t border-[var(--border-color)] flex items-center gap-2">
+                  <button
+                    disabled={savingTags}
+                    onClick={async () => {
+                      const popUser2 = users.find(u => u.id === tagPopoverUserId);
+                      if (!popUser2) return;
+                      setSavingTags(true);
+                      try {
+                        const currentTagIds = new Set(popUser2.tags?.map(t => t.tag.id) || []);
+                        // Tags to add
+                        const toAdd = [...tagDraft].filter(id => !currentTagIds.has(id));
+                        // Tags to remove
+                        const toRemove = [...currentTagIds].filter(id => !tagDraft.has(id));
+                        await Promise.all([
+                          ...toAdd.map(tagId => fetch(`/api/users/${popUser2.id}/tags`, {
+                            method: 'POST', headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ tagId }),
+                          })),
+                          ...toRemove.map(tagId => fetch(`/api/users/${popUser2.id}/tags`, {
+                            method: 'DELETE', headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ tagId }),
+                          })),
+                        ]);
+                        fetchData();
+                        setTagPopoverUserId(null);
+                        setTagPopoverPos(null);
+                      } finally {
+                        setSavingTags(false);
+                      }
+                    }}
+                    className="btn-primary flex-1 flex items-center justify-center gap-1.5"
+                    style={{ height: 32, fontSize: 12, borderRadius: 8 }}
+                  >
+                    {savingTags ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}
+                    Simpan Tag
+                  </button>
                   <button
                     onClick={() => { setShowTagManager(true); setTagPopoverUserId(null); setTagPopoverPos(null); }}
-                    className="w-full text-xs text-[var(--text-muted)] hover:text-[#818cf8] transition-colors text-center"
+                    className="btn-icon"
+                    style={{ height: 32, width: 32 }}
+                    title="Buat tag baru"
                   >
-                    + Buat tag baru
+                    <Plus size={13} />
                   </button>
                 </div>
               </>
