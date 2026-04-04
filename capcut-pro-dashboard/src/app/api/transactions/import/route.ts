@@ -18,6 +18,7 @@ interface LynkTransaction {
   name?: string;
   email?: string;
   phone?: string;
+  status?: string;         // SUCCESS | PENDING | FAILED dll
   "Addres Data"?: string;
   "Voucher Code"?: string;
   appointment_time?: string;
@@ -42,6 +43,7 @@ export async function POST(req: NextRequest) {
 
     let created = 0;
     let skipped = 0;
+    let skippedNonSuccess = 0; // transaksi PENDING/FAILED/dll
     let usersCreated = 0;
     let usersUpdated = 0;
     const errors: string[] = [];
@@ -83,6 +85,15 @@ export async function POST(req: NextRequest) {
 
       const rawProduct = trx.produk || trx.product || trx["nama produk"] || trx.item || trx.title || trx.nama_produk || trx["judul barang"];
       const productName = typeof rawProduct === 'string' && rawProduct ? rawProduct.trim() : null;
+
+      // ── Status transaksi dari Lynk.id ──────────────────────────────────────
+      // Hanya import transaksi dengan status SUCCESS. Skip PENDING, FAILED, dll.
+      const rawStatus = trx.status || trx["order status"] || trx["payment status"] || "";
+      const trxStatus = String(rawStatus).trim().toUpperCase();
+      if (trxStatus && trxStatus !== "SUCCESS") {
+        skippedNonSuccess++;
+        continue; // lewati transaksi non-success
+      }
       
       const purchasedDateStr = trx["purchased date"] || trx.purchased_date || trx.tanggal || trx.date || trx["tanggal pembelian"] || null;
 
@@ -246,6 +257,7 @@ export async function POST(req: NextRequest) {
         total: rawTransactions.length,
         created,
         skipped,
+        skippedNonSuccess,
         usersCreated,
         usersUpdated,
         errors: errors.slice(0, 10),

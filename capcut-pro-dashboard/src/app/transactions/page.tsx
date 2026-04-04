@@ -104,7 +104,8 @@ export default function TransactionsPage() {
     file: File;
     status: 'waiting' | 'importing' | 'done' | 'error';
     created: number;
-    skipped: number;
+    skipped: number;            // duplikat
+    skippedNonSuccess: number;  // PENDING/FAILED dari Lynk.id
     errors: string[];
     rows: number;
   }
@@ -196,7 +197,7 @@ export default function TransactionsPage() {
     if (selected.length === 0) return;
     // Sort: terbaru → terlama berdasarkan lastModified
     const sorted = selected.sort((a, b) => b.lastModified - a.lastModified);
-    setImportFiles(sorted.map(f => ({ file: f, status: 'waiting', created: 0, skipped: 0, errors: [], rows: 0 })));
+    setImportFiles(sorted.map(f => ({ file: f, status: 'waiting', created: 0, skipped: 0, skippedNonSuccess: 0, errors: [], rows: 0 })));
     setImportDone(false);
     setImportProgress(null);
   }
@@ -283,7 +284,7 @@ export default function TransactionsPage() {
       }
 
       const totalBatches = Math.ceil(transactions.length / BATCH_SIZE);
-      let filCreated = 0, filSkipped = 0;
+      let filCreated = 0, filSkipped = 0, filSkippedNonSuccess = 0;
       const filErrors: string[] = [];
 
       for (let b = 0; b < totalBatches; b++) {
@@ -309,9 +310,10 @@ export default function TransactionsPage() {
           catch { filErrors.push(`Batch ${b + 1}: Server error — ${rawText.substring(0, 100)}`); continue; }
 
           if (res.ok && json.summary) {
-            const s = json.summary as { created: number; skipped: number; errors: string[] };
+            const s = json.summary as { created: number; skipped: number; skippedNonSuccess: number; errors: string[] };
             filCreated += s.created || 0;
             filSkipped += s.skipped || 0;
+            filSkippedNonSuccess += s.skippedNonSuccess || 0;
             if (s.errors?.length) filErrors.push(...s.errors);
           } else {
             filErrors.push(`Batch ${b + 1}: ${(json.error as string) || 'Server error'}`);
@@ -332,7 +334,7 @@ export default function TransactionsPage() {
       });
 
       setImportFiles(prev => prev.map((j, idx) =>
-        idx === fi ? { ...j, status: filErrors.length > 0 && filCreated === 0 ? 'error' : 'done', created: filCreated, skipped: filSkipped, errors: filErrors.slice(0, 10), rows: transactions.length } : j
+        idx === fi ? { ...j, status: filErrors.length > 0 && filCreated === 0 ? 'error' : 'done', created: filCreated, skipped: filSkipped, skippedNonSuccess: filSkippedNonSuccess, errors: filErrors.slice(0, 10), rows: transactions.length } : j
       ));
     }
 
@@ -709,6 +711,7 @@ export default function TransactionsPage() {
                             {job.status === 'done' && (
                               <>
                                 <span className="text-[10px] text-emerald-400">✓ {job.created} dibuat</span>
+                                {job.skippedNonSuccess > 0 && <span className="text-[10px] text-orange-400">⊘ {job.skippedNonSuccess} pending/gagal</span>}
                                 {job.skipped > 0 && <span className="text-[10px] text-yellow-400">⊘ {job.skipped} duplikat</span>}
                               </>
                             )}
@@ -733,8 +736,8 @@ export default function TransactionsPage() {
                   <div className="grid grid-cols-3 gap-2">
                     {[
                       { label: "Transaksi Dibuat", val: importFiles.reduce((a, j) => a + j.created, 0), color: "text-emerald-400" },
+                      { label: "Pending/Gagal Dilewati", val: importFiles.reduce((a, j) => a + j.skippedNonSuccess, 0), color: "text-orange-400" },
                       { label: "Duplikat Dilewati", val: importFiles.reduce((a, j) => a + j.skipped, 0), color: "text-yellow-400" },
-                      { label: "File Berhasil", val: importFiles.filter(j => j.status === 'done').length, color: "text-[#818cf8]" },
                     ].map(({ label, val, color }) => (
                       <div key={label} className="text-center p-2 rounded-lg" style={{ background: "rgba(255,255,255,0.03)" }}>
                         <p className={`text-base font-bold ${color}`}>{val}</p>
