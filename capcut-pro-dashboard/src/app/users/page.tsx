@@ -168,18 +168,6 @@ export default function UsersPage() {
     return () => window.removeEventListener('resize', check);
   }, []);
 
-  // Close filter panel on outside click
-  useEffect(() => {
-    if (!showFilterPanel || isMobile) return;
-    const close = (e: MouseEvent) => {
-      if (filterBtnRef.current && !filterBtnRef.current.closest('.filter-panel-wrapper')?.contains(e.target as Node)) {
-        setShowFilterPanel(false);
-      }
-    };
-    document.addEventListener('mousedown', close);
-    return () => document.removeEventListener('mousedown', close);
-  }, [showFilterPanel, isMobile]);
-
   const buildFilterParams = useCallback(() => {
     const params = new URLSearchParams();
     if (search) params.set("search", search);
@@ -1137,6 +1125,7 @@ export default function UsersPage() {
           {/* Panel */}
           <div
             onClick={e => e.stopPropagation()}
+            onMouseDown={e => e.stopPropagation()}
             style={isMobile ? {
               position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 45,
               borderRadius: '20px 20px 0 0', maxHeight: '88vh', overflowY: 'auto',
