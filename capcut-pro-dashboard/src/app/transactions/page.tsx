@@ -23,6 +23,8 @@ import {
   Maximize2,
   Clock,
   Files,
+  Smartphone,
+  Monitor,
 } from "lucide-react";
 
 interface Transaction {
@@ -84,8 +86,15 @@ export default function TransactionsPage() {
   
   const [showModal, setShowModal] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [result, setResult] = useState<{ account?: { email: string; password: string }; message?: string } | null>(null);
+  const [result, setResult] = useState<{ success?: boolean; userId?: string; message?: string } | null>(null);
   const [form, setForm] = useState({ name: "", email: "", whatsapp: "", amount: "", productName: "" });
+
+  // State untuk kirim akun setelah transaksi berhasil
+  const [accountType, setAccountType] = useState<'mobile' | 'desktop'>('mobile');
+  const [sendingAccount, setSendingAccount] = useState(false);
+  const [sendResult, setSendResult] = useState<{ sent: boolean; accountEmail?: string; message?: string } | null>(null);
+
+  const WEBHOOK_URL = "https://appsheetindonesia-dorrizstore.qxifii.easypanel.host/webhook/871951d3-775f-4891-906c-c9c372f7aa88";
 
   // Pagination
   const [page, setPage] = useState(1);
@@ -155,6 +164,7 @@ export default function TransactionsPage() {
     if (!form.name || !form.email || !form.whatsapp) return;
     setSubmitting(true);
     setResult(null);
+    setSendResult(null);
     try {
       const res = await fetch("/api/transactions", {
         method: "POST",
@@ -163,7 +173,7 @@ export default function TransactionsPage() {
       });
       const json = await res.json();
       if (res.ok) {
-        setResult({ account: json.account, message: json.message });
+        setResult({ success: true, userId: json.userId, message: json.message || "Transaksi berhasil dicatat!" });
         fetchData();
       } else {
         setResult({ message: json.error || "Gagal membuat transaksi" });
@@ -172,10 +182,56 @@ export default function TransactionsPage() {
     setSubmitting(false);
   }
 
+  async function handleSendAccount() {
+    setSendingAccount(true);
+    setSendResult(null);
+    try {
+      // 1. Ambil stok akun tersedia sesuai tipe
+      const stockRes = await fetch(`/api/stock?status=available&productType=${accountType}&limit=1`);
+      const stockJson = await stockRes.json();
+      const account = stockJson.accounts?.[0];
+
+      if (!account) {
+        setSendResult({ sent: false, message: `Tidak ada stok ${accountType === 'mobile' ? 'Mobile' : 'Desktop'} yang tersedia` });
+        setSendingAccount(false);
+        return;
+      }
+
+      // 2. Kirim ke webhook
+      const whatsapp = form.whatsapp.replace(/^0/, "62").replace(/\D/g, "");
+      await fetch(WEBHOOK_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: form.name,
+          email: form.email,
+          phone: whatsapp,
+          accountEmail: account.accountEmail,
+          accountPassword: account.accountPassword,
+          productType: accountType,
+          durationDays: account.durationDays || 30,
+        }),
+      });
+
+      // 3. Update usedSlots di stok (tandai slot terpakai)
+      await fetch(`/api/stock/${account.id}/use`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: result?.userId }),
+      }).catch(() => {}); // non-blocking jika endpoint belum ada
+
+      setSendResult({ sent: true, accountEmail: account.accountEmail, message: "Akun berhasil dikirim via webhook!" });
+    } catch (err) {
+      setSendResult({ sent: false, message: `Gagal mengirim: ${err instanceof Error ? err.message : String(err)}` });
+    }
+    setSendingAccount(false);
+  }
+
   function closeModal() {
     setShowModal(false);
     setForm({ name: "", email: "", whatsapp: "", amount: "", productName: "" });
     setResult(null);
+    setSendResult(null);
   }
 
   function openImportModal() {
@@ -546,15 +602,75 @@ export default function TransactionsPage() {
               <button className="btn-icon" onClick={closeModal}><X size={18} /></button>
             </div>
             <div className="modal-body space-y-4">
-              {result?.account ? (
-                <div className="p-4 rounded-xl border border-emerald-500/20 bg-emerald-500/5 space-y-3">
-                  <p className="font-semibold text-emerald-300">✅ {result.message}</p>
-                  <div className="bg-[var(--bg-primary)] rounded-lg p-3 font-mono text-sm space-y-1">
-                    <p><span className="text-[var(--text-muted)]">Email:</span> <span className="text-white">{result.account.email}</span></p>
-                    <p><span className="text-[var(--text-muted)]">Password:</span> <span className="text-white">{result.account.password}</span></p>
+              {result?.success ? (
+                <>
+                  {/* Sukses — pilih kirim akun atau tidak */}
+                  <div className="p-4 rounded-xl border border-emerald-500/20 bg-emerald-500/5 flex items-center gap-2">
+                    <Check size={16} className="text-emerald-400 flex-shrink-0" />
+                    <p className="font-semibold text-emerald-300 text-sm">{result.message}</p>
                   </div>
-                  <p className="text-xs text-[var(--text-muted)]">Salin dan kirim data ini ke pelanggan via WhatsApp.</p>
-                </div>
+
+                  {!sendResult && (
+                    <>
+                      <p className="text-sm text-[var(--text-secondary)]">Pilih jenis akun yang akan dikirim ke pelanggan:</p>
+
+                      {/* Toggle Mobile / Desktop */}
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => setAccountType('mobile')}
+                          className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-semibold border transition-all`}
+                          style={{
+                            background: accountType === 'mobile' ? 'rgba(34,197,94,0.12)' : 'rgba(255,255,255,0.03)',
+                            border: `1px solid ${accountType === 'mobile' ? 'rgba(34,197,94,0.4)' : 'rgba(255,255,255,0.08)'}`,
+                            color: accountType === 'mobile' ? '#22c55e' : 'var(--text-muted)',
+                          }}
+                        >
+                          <Smartphone size={16} /> Mobile
+                          <span style={{ fontSize: 10 }}>(HP/iPad)</span>
+                        </button>
+                        <button
+                          onClick={() => setAccountType('desktop')}
+                          className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-semibold border transition-all`}
+                          style={{
+                            background: accountType === 'desktop' ? 'rgba(99,102,241,0.12)' : 'rgba(255,255,255,0.03)',
+                            border: `1px solid ${accountType === 'desktop' ? 'rgba(99,102,241,0.4)' : 'rgba(255,255,255,0.08)'}`,
+                            color: accountType === 'desktop' ? '#818cf8' : 'var(--text-muted)',
+                          }}
+                        >
+                          <Monitor size={16} /> Desktop
+                          <span style={{ fontSize: 10 }}>(PC/Mac)</span>
+                        </button>
+                      </div>
+
+                      <p className="text-[11px] text-[var(--text-muted)]">
+                        Akun <strong style={{ color: accountType === 'mobile' ? '#22c55e' : '#818cf8' }}>{accountType === 'mobile' ? 'Mobile' : 'Desktop'}</strong> tersedia akan diambil dari stok dan dikirim otomatis ke pelanggan via webhook.
+                      </p>
+                    </>
+                  )}
+
+                  {/* Hasil kirim */}
+                  {sendResult && (
+                    <div
+                      className="p-3 rounded-xl flex items-start gap-2"
+                      style={{
+                        background: sendResult.sent ? 'rgba(34,197,94,0.08)' : 'rgba(239,68,68,0.08)',
+                        border: `1px solid ${sendResult.sent ? 'rgba(34,197,94,0.2)' : 'rgba(239,68,68,0.2)'}`,
+                      }}
+                    >
+                      {sendResult.sent
+                        ? <Check size={15} className="text-emerald-400 mt-0.5 flex-shrink-0" />
+                        : <X size={15} className="text-rose-400 mt-0.5 flex-shrink-0" />}
+                      <div>
+                        <p className={`text-sm font-semibold ${sendResult.sent ? 'text-emerald-300' : 'text-rose-300'}`}>
+                          {sendResult.message}
+                        </p>
+                        {sendResult.accountEmail && (
+                          <p className="text-xs text-[var(--text-muted)] mt-0.5 font-mono">{sendResult.accountEmail}</p>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </>
               ) : (
                 <>
                   <div><label className="form-label">Nama Pelanggan</label><input type="text" className="form-input" placeholder="Nama lengkap" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></div>
@@ -567,13 +683,32 @@ export default function TransactionsPage() {
               )}
             </div>
             <div className="modal-footer">
-              <button className="btn-secondary" onClick={closeModal}>Tutup</button>
-              {!result?.account && (
+              <button className="btn-secondary" onClick={closeModal}>Tutup{result?.success ? " saja" : ""}</button>
+              {!result?.success ? (
                 <button className="btn-success" onClick={handleAddManual} disabled={submitting}>
                   {submitting ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />}
-                  Simpan & Kirim Akun
+                  Simpan Transaksi
                 </button>
-              )}
+              ) : !sendResult ? (
+                <button
+                  onClick={handleSendAccount}
+                  disabled={sendingAccount}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 6,
+                    padding: '0 16px', height: 38, borderRadius: 10,
+                    background: accountType === 'mobile'
+                      ? 'linear-gradient(135deg, #16a34a, #22c55e)'
+                      : 'linear-gradient(135deg, #4f46e5, #6366f1)',
+                    border: 'none', color: 'white', fontSize: 13, fontWeight: 600,
+                    cursor: sendingAccount ? 'wait' : 'pointer',
+                  }}
+                >
+                  {sendingAccount
+                    ? <Loader2 size={14} className="animate-spin" />
+                    : accountType === 'mobile' ? <Smartphone size={14} /> : <Monitor size={14} />}
+                  Kirim Akun {accountType === 'mobile' ? 'Mobile' : 'Desktop'}
+                </button>
+              ) : null}
             </div>
           </div>
         </div>
