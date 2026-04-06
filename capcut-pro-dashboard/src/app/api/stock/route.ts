@@ -28,7 +28,14 @@ export async function GET(req: NextRequest) {
         where,
         include: {
           transactions: {
-            select: { user: { select: { name: true, email: true } } },
+            select: {
+              user: { select: { name: true, email: true, whatsapp: true } },
+              amount: true,
+              productName: true,
+              purchaseDate: true,
+              warrantyExpiredAt: true,
+              status: true,
+            },
             orderBy: { purchaseDate: "desc" },
           },
         },
