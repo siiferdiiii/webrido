@@ -73,20 +73,23 @@ export async function GET(req: NextRequest) {
     }
 
     // ── Last transaction date range ───────────────────────────────────────────
-    // Filter users whose LAST transaction date is in [from, to].
-    // Logic: has SOME success transaction >= from AND NONE > to
+    // Filter users whose LAST SUCCESS transaction date is in [from, to].
+    // Dates are treated as WIB (UTC+7) to match browser display and Lynk.id CSV dates.
     if (lastTrxFrom || lastTrxTo) {
       const andConditions: Record<string, unknown>[] = [];
       if (lastTrxFrom) {
-        const from = new Date(lastTrxFrom + "T00:00:00");
+        // Midnight WIB = UTC+7, e.g. "2026-03-06T00:00:00+07:00" = "2026-03-05T17:00:00Z"
+        const from = new Date(lastTrxFrom + "T00:00:00+07:00");
         andConditions.push({
           transactions: { some: { status: "success", purchaseDate: { gte: from } } },
         });
       }
       if (lastTrxTo) {
-        const to = new Date(lastTrxTo + "T23:59:59");
+        // End of day WIB, use start of NEXT day (exclusive) to avoid second-precision edge cases
+        const nextDay = new Date(lastTrxTo + "T00:00:00+07:00");
+        nextDay.setDate(nextDay.getDate() + 1);
         andConditions.push({
-          transactions: { none: { status: "success", purchaseDate: { gt: to } } },
+          transactions: { none: { status: "success", purchaseDate: { gte: nextDay } } },
         });
       }
       if (andConditions.length > 0) {
@@ -119,6 +122,7 @@ export async function GET(req: NextRequest) {
         where,
         include: {
           transactions: {
+            where: { status: "success" }, // hanya transaksi sukses untuk Pembelian Terakhir
             orderBy: { purchaseDate: "desc" },
             take: 1,
             select: { purchaseDate: true, warrantyExpiredAt: true },
