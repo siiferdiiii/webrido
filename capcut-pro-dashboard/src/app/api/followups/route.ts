@@ -66,7 +66,9 @@ export async function POST(req: NextRequest) {
       data: {
         title,
         messageTemplate,
-        scheduledAt: new Date(scheduledAt),
+        // datetime-local dari frontend tidak ada timezone info (misal "2026-04-09T15:19")
+        // User input WIB, jadi tambahkan offset +07:00 agar Date parsing benar
+        scheduledAt: new Date(scheduledAt.includes("+") || scheduledAt.endsWith("Z") ? scheduledAt : scheduledAt + "+07:00"),
         totalRecipients: recipientList.length,
         recipients: {
           create: recipientList.map((r) => ({
@@ -84,18 +86,11 @@ export async function POST(req: NextRequest) {
     // Send to n8n Webhook
     try {
       const webhookUrl = "https://appsheetindonesia-dorrizstore.qxifii.easypanel.host/webhook/5ba40d68-0e44-4e0a-ac6a-b0df499653a4";
-
-      // Hitung delay dalam menit dari sekarang sampai scheduledAt
-      const nowMs = Date.now();
-      const scheduledMs = new Date(followup.scheduledAt).getTime();
-      const delayMinutes = Math.max(0, Math.round((scheduledMs - nowMs) / 60000));
-
       const payload = {
         followupId: followup.id,
         title: followup.title,
         messageTemplate: followup.messageTemplate,
         scheduledAt: followup.scheduledAt,
-        delayMinutes,
         recipients: followup.recipients.map((r) => ({
           id: r.id,
           whatsappNumber: r.whatsappNumber,
