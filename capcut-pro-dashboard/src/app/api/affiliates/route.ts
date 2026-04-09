@@ -1,8 +1,11 @@
 import { prisma } from "@/lib/db";
 import { NextRequest, NextResponse } from "next/server";
+import { requirePermission } from "@/lib/auth";
 
 // GET /api/affiliates - Daftar semua affiliate
 export async function GET(req: NextRequest) {
+  const auth = await requirePermission("page_affiliates");
+  if ("error" in auth) return auth.error;
   try {
     const { searchParams } = new URL(req.url);
     const search = searchParams.get("search") || "";
@@ -34,6 +37,8 @@ export async function GET(req: NextRequest) {
 
 // POST /api/affiliates - Tambah affiliate baru
 export async function POST(req: NextRequest) {
+  const auth = await requirePermission("page_affiliates");
+  if ("error" in auth) return auth.error;
   try {
     const body = await req.json();
     const { name, email, whatsapp, commissionRate } = body;

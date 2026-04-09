@@ -1,8 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
-import Sidebar from "@/components/Sidebar";
-import { PrivacyProvider } from "@/context/PrivacyContext";
-import { MobileNavProvider } from "@/context/MobileNavContext";
+import LayoutWrapper from "@/components/LayoutWrapper";
 
 export const metadata: Metadata = {
   title: "CapCut Pro Dashboard",
@@ -23,16 +21,7 @@ export default function RootLayout({
         <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
       </head>
       <body>
-        <MobileNavProvider>
-          <PrivacyProvider>
-            <div className="flex min-h-screen">
-              <Sidebar />
-              <main className="flex-1 lg:ml-[260px] ml-0 min-h-screen min-w-0">
-                {children}
-              </main>
-            </div>
-          </PrivacyProvider>
-        </MobileNavProvider>
+        <LayoutWrapper>{children}</LayoutWrapper>
       </body>
     </html>
   );

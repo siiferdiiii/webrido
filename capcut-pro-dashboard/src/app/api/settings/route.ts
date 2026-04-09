@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/db";
 import { NextRequest, NextResponse } from "next/server";
+import { requireAuth, requireDeveloper } from "@/lib/auth";
 
 // Default values untuk setiap key
 const DEFAULTS: Record<string, string> = {
@@ -49,6 +50,8 @@ Jangan lewatkan kesempatan ini! Hubungi kami sekarang untuk info lebih lanjut �
 
 // GET /api/settings — ambil semua settings
 export async function GET() {
+  const auth = await requireAuth();
+  if ("error" in auth) return auth.error;
   try {
     const rows = await prisma.appSetting.findMany();
     const result: Record<string, string> = { ...DEFAULTS };
@@ -64,6 +67,8 @@ export async function GET() {
 
 // PUT /api/settings — update satu atau banyak key
 export async function PUT(req: NextRequest) {
+  const auth = await requireDeveloper();
+  if ("error" in auth) return auth.error;
   try {
     const body = await req.json() as Record<string, string>;
     const updates = Object.entries(body);

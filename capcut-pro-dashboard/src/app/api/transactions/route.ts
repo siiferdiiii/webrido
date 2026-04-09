@@ -1,10 +1,13 @@
 import { prisma } from "@/lib/db";
 import { NextRequest, NextResponse } from "next/server";
+import { requirePermission } from "@/lib/auth";
 
 export const dynamic = 'force-dynamic';
 
 // GET /api/transactions - Ambil semua transaksi
 export async function GET(req: NextRequest) {
+  const auth = await requirePermission("page_transactions");
+  if ("error" in auth) return auth.error;
   try {
     const { searchParams } = new URL(req.url);
     const search = searchParams.get("search") || "";
@@ -78,6 +81,8 @@ export async function GET(req: NextRequest) {
 
 // POST /api/transactions - Tambah transaksi manual
 export async function POST(req: NextRequest) {
+  const auth = await requirePermission("page_transactions");
+  if ("error" in auth) return auth.error;
   try {
     const body = await req.json();
     const { email, name, whatsapp, amount, productName, durationDays = 30 } = body;

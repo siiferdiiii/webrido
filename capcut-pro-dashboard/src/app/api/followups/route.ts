@@ -1,8 +1,11 @@
 import { prisma } from "@/lib/db";
 import { NextRequest, NextResponse } from "next/server";
+import { requirePermission } from "@/lib/auth";
 
 // GET /api/followups - Daftar jadwal follow-up
 export async function GET(req: NextRequest) {
+  const auth = await requirePermission("page_followup");
+  if ("error" in auth) return auth.error;
   try {
     const { searchParams } = new URL(req.url);
     const status = searchParams.get("status") || "";
@@ -37,6 +40,8 @@ export async function GET(req: NextRequest) {
 
 // POST /api/followups - Buat jadwal follow-up baru
 export async function POST(req: NextRequest) {
+  const auth = await requirePermission("page_followup");
+  if ("error" in auth) return auth.error;
   try {
     const body = await req.json();
     const { title, messageTemplate, scheduledAt, recipients } = body;

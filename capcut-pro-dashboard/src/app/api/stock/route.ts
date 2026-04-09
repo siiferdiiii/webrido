@@ -1,8 +1,11 @@
 import { prisma } from "@/lib/db";
 import { NextRequest, NextResponse } from "next/server";
+import { requirePermission } from "@/lib/auth";
 
 // GET /api/stock - Ambil semua stok akun dengan filter
 export async function GET(req: NextRequest) {
+  const auth = await requirePermission("page_stock");
+  if ("error" in auth) return auth.error;
   try {
     const { searchParams } = new URL(req.url);
     const search = searchParams.get("search") || "";

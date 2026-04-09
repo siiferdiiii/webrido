@@ -1,10 +1,13 @@
 import { prisma } from "@/lib/db";
 import { NextRequest, NextResponse } from "next/server";
+import { requireAuth } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
 // GET /api/tags - Ambil semua tag
 export async function GET() {
+  const auth = await requireAuth();
+  if ("error" in auth) return auth.error;
   try {
     const tags = await prisma.tag.findMany({
       orderBy: { createdAt: "asc" },

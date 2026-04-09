@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useCallback } from "react";
 import Topbar from "@/components/Topbar";
+import { useAuth } from "@/context/AuthContext";
+import { ALL_PERMISSIONS, PermissionKey, DEFAULT_ADMIN_PERMISSIONS } from "@/lib/auth";
 import {
   Settings,
   Save,
@@ -120,6 +122,8 @@ function renderPreview(template: string, data: Record<string, string>): string {
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function SettingsPage() {
+  const { isDeveloper } = useAuth();
+
   const [settings, setSettings] = useState<AppSettings>({ ...DEFAULT_SETTINGS });
   const [original, setOriginal] = useState<AppSettings>({ ...DEFAULT_SETTINGS });
   const [loading, setLoading] = useState(true);
@@ -139,6 +143,23 @@ export default function SettingsPage() {
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [savingTag, setSavingTag] = useState(false);
   const [tagError, setTagError] = useState("");
+
+  // ── Admin management state (developer only) ─────────────────────────────────
+  interface AdminUserItem {
+    id: string; email: string; name: string; role: string;
+    status: string; permissions: Record<string, boolean> | null; createdAt: string;
+  }
+  const [adminUsers, setAdminUsers] = useState<AdminUserItem[]>([]);
+  const [loadingAdmins, setLoadingAdmins] = useState(false);
+  const [expandedAdminId, setExpandedAdminId] = useState<string | null>(null);
+  const [savingAdminId, setSavingAdminId] = useState<string | null>(null);
+  const [deleteAdminId, setDeleteAdminId] = useState<string | null>(null);
+  const [inviteLink, setInviteLink] = useState("");
+  const [inviteExpiry, setInviteExpiry] = useState("");
+  const [generatingInvite, setGeneratingInvite] = useState(false);
+  const [copiedInvite, setCopiedInvite] = useState(false);
+  // Local permission edits per admin (before save)
+  const [localPerms, setLocalPerms] = useState<Record<string, Record<string, boolean>>>({});
 
   const fetchSettings = useCallback(async () => {
     setLoading(true);
@@ -227,7 +248,87 @@ export default function SettingsPage() {
     setSavingTag(false);
   }
 
+  // \u2500\u2500 Admin management functions \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+
+  const fetchAdmins = useCallback(async () => {
+    if (!isDeveloper) return;
+    setLoadingAdmins(true);
+    try {
+      const res = await fetch("/api/admin/users");
+      const json = await res.json();
+      setAdminUsers(json.users || []);
+      // Init localPerms from DB
+      const permsMap: Record<string, Record<string, boolean>> = {};
+      (json.users || []).forEach((u: { id: string; permissions: Record<string, boolean> | null }) => {
+        permsMap[u.id] = u.permissions ? { ...u.permissions } : { ...DEFAULT_ADMIN_PERMISSIONS };
+      });
+      setLocalPerms(permsMap);
+    } catch (e) { console.error(e); }
+    setLoadingAdmins(false);
+  }, [isDeveloper]);
+
+  useEffect(() => { if (isDeveloper) fetchAdmins(); }, [fetchAdmins, isDeveloper]);
+
+  async function handleGenerateInvite() {
+    setGeneratingInvite(true);
+    try {
+      const res = await fetch("/api/admin/users", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "generate_invite" }),
+      });
+      const json = await res.json();
+      if (res.ok) { setInviteLink(json.inviteLink); setInviteExpiry(json.expiresAt); }
+    } catch (e) { console.error(e); }
+    setGeneratingInvite(false);
+  }
+
+  async function handleToggleAdminStatus(id: string, currentStatus: string) {
+    setSavingAdminId(id);
+    const newStatus = currentStatus === "active" ? "inactive" : "active";
+    try {
+      await fetch(`/api/admin/users/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: newStatus }),
+      });
+      fetchAdmins();
+    } catch (e) { console.error(e); }
+    setSavingAdminId(null);
+  }
+
+  async function handleSavePermissions(id: string) {
+    setSavingAdminId(id);
+    try {
+      await fetch(`/api/admin/users/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ permissions: localPerms[id] }),
+      });
+      fetchAdmins();
+    } catch (e) { console.error(e); }
+    setSavingAdminId(null);
+  }
+
+  async function handleDeleteAdmin(id: string) {
+    setSavingAdminId(id);
+    try {
+      await fetch(`/api/admin/users/${id}`, { method: "DELETE" });
+      setDeleteAdminId(null);
+      fetchAdmins();
+    } catch (e) { console.error(e); }
+    setSavingAdminId(null);
+  }
+
+  function togglePerm(adminId: string, key: string) {
+    setLocalPerms(prev => ({
+      ...prev,
+      [adminId]: { ...(prev[adminId] || {}), [key]: !(prev[adminId]?.[key] ?? false) },
+    }));
+  }
+
   async function handleSave() {
+
     setSaving(true);
     try {
       const res = await fetch("/api/settings", {
@@ -614,10 +715,184 @@ export default function SettingsPage() {
                 {saving ? <Loader2 size={16} className="animate-spin" /> : saved ? <Check size={16} /> : <Save size={16} />}
                 {saving ? "Menyimpan..." : saved ? "Tersimpan!" : "Simpan Semua Pengaturan"}
               </button>
+
+              {/* ─── Admin Management (Developer only) ────────────────────── */}
+              {isDeveloper && (
+                <div className="glass-card p-5 space-y-4">
+                  {/* Header */}
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: "rgba(245,158,11,0.15)" }}>
+                      <Shield size={16} className="text-amber-400" />
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-sm font-semibold text-white">Manajemen Admin</p>
+                      <p className="text-[11px] text-[var(--text-muted)]">Kelola akun & hak akses</p>
+                    </div>
+                    <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ background: "rgba(245,158,11,0.15)", color: "#f59e0b" }}>
+                      {adminUsers.filter(u => u.role === "admin").length} admin
+                    </span>
+                  </div>
+
+                  {/* Invite Link Generator */}
+                  <div className="p-3 rounded-xl space-y-2" style={{ background: "rgba(99,102,241,0.06)", border: "1px solid rgba(99,102,241,0.15)" }}>
+                    <p className="text-[10px] font-semibold text-[var(--text-muted)] uppercase tracking-wider">Undang Admin Baru</p>
+                    <button
+                      onClick={handleGenerateInvite}
+                      disabled={generatingInvite}
+                      className="w-full flex items-center justify-center gap-2 py-2 rounded-xl text-xs font-semibold transition-all"
+                      style={{ background: "rgba(99,102,241,0.15)", border: "1px solid rgba(99,102,241,0.3)", color: "#818cf8" }}
+                    >
+                      {generatingInvite ? <Loader2 size={13} className="animate-spin" /> : <Settings size={13} />}
+                      Generate Invite Link (24 jam)
+                    </button>
+                    {inviteLink && (
+                      <div className="space-y-1.5">
+                        <div
+                          className="flex items-center gap-2 px-2 py-1.5 rounded-lg"
+                          style={{ background: "rgba(0,0,0,0.3)", border: "1px solid rgba(255,255,255,0.06)" }}
+                        >
+                          <span className="text-[11px] font-mono text-[var(--text-muted)] flex-1 truncate">{inviteLink}</span>
+                          <button
+                            onClick={() => { navigator.clipboard.writeText(inviteLink); setCopiedInvite(true); setTimeout(() => setCopiedInvite(false), 2000); }}
+                            className="text-[11px] font-semibold flex-shrink-0"
+                            style={{ color: copiedInvite ? "#22c55e" : "#818cf8" }}
+                          >
+                            {copiedInvite ? <Check size={13} /> : <ChevronRight size={13} />}
+                          </button>
+                        </div>
+                        <p className="text-[10px] text-[var(--text-muted)]">
+                          Kadaluarsa: {new Date(inviteExpiry).toLocaleString("id-ID")}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Admin Users List */}
+                  {loadingAdmins ? (
+                    <div className="flex justify-center py-3"><Loader2 size={16} className="animate-spin text-amber-400" /></div>
+                  ) : (
+                    <div className="space-y-2 max-h-[480px] overflow-y-auto pr-0.5">
+                      {adminUsers.filter(u => u.role === "admin").length === 0 && (
+                        <p className="text-xs text-[var(--text-muted)] text-center py-3">Belum ada akun admin.</p>
+                      )}
+
+                      {adminUsers.filter(u => u.role === "admin").map(admin => {
+                        const isExpanded = expandedAdminId === admin.id;
+                        const perms = localPerms[admin.id] || DEFAULT_ADMIN_PERMISSIONS;
+                        const isSaving = savingAdminId === admin.id;
+
+                        return (
+                          <div key={admin.id} className="rounded-xl overflow-hidden" style={{ border: "1px solid rgba(255,255,255,0.06)" }}>
+                            {/* Admin row header */}
+                            <div className="flex items-center gap-2.5 px-3 py-2.5 hover:bg-white/[0.02] transition-colors">
+                              {/* Avatar */}
+                              <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-white flex-shrink-0"
+                                style={{ background: admin.status === "active" ? "var(--gradient-primary)" : "rgba(255,255,255,0.1)" }}>
+                                {admin.name.slice(0, 2).toUpperCase()}
+                              </div>
+                              {/* Info */}
+                              <div className="flex-1 min-w-0">
+                                <p className="text-xs font-semibold text-white truncate">{admin.name}</p>
+                                <p className="text-[10px] text-[var(--text-muted)] truncate">{admin.email}</p>
+                              </div>
+                              {/* Status toggle */}
+                              <button
+                                onClick={() => handleToggleAdminStatus(admin.id, admin.status)}
+                                disabled={isSaving}
+                                className="flex-shrink-0 w-9 h-5 rounded-full transition-all relative"
+                                style={{ background: admin.status === "active" ? "rgba(34,197,94,0.3)" : "rgba(255,255,255,0.1)", border: `1px solid ${admin.status === "active" ? "rgba(34,197,94,0.5)" : "rgba(255,255,255,0.15)"}` }}
+                                title={admin.status === "active" ? "Klik untuk nonaktifkan" : "Klik untuk aktifkan"}
+                              >
+                                <span className="absolute top-0.5 w-4 h-4 rounded-full transition-all" style={{
+                                  background: admin.status === "active" ? "#22c55e" : "rgba(255,255,255,0.3)",
+                                  left: admin.status === "active" ? "calc(100% - 18px)" : "2px",
+                                }} />
+                              </button>
+                              {/* Expand/collapse permissions */}
+                              <button
+                                onClick={() => setExpandedAdminId(isExpanded ? null : admin.id)}
+                                className="btn-icon flex-shrink-0"
+                                style={{ width: 26, height: 26 }}
+                                title="Atur izin"
+                              >
+                                <ChevronRight size={13} className={`transition-transform ${isExpanded ? "rotate-90" : ""}`} />
+                              </button>
+                              {/* Delete */}
+                              {deleteAdminId === admin.id ? (
+                                <div className="flex gap-1">
+                                  <button onClick={() => handleDeleteAdmin(admin.id)} disabled={isSaving}
+                                    className="text-[11px] font-bold text-rose-400 hover:text-rose-300">
+                                    {isSaving ? <Loader2 size={11} className="animate-spin" /> : "Hapus"}
+                                  </button>
+                                  <button onClick={() => setDeleteAdminId(null)} className="text-[11px] text-[var(--text-muted)]">Batal</button>
+                                </div>
+                              ) : (
+                                <button onClick={() => setDeleteAdminId(admin.id)} className="btn-icon hover:text-rose-400 hover:bg-rose-500/10 flex-shrink-0" style={{ width: 26, height: 26 }}>
+                                  <Trash2 size={12} />
+                                </button>
+                              )}
+                            </div>
+
+                            {/* Permissions panel */}
+                            {isExpanded && (
+                              <div className="px-3 pb-3 border-t border-white/5 pt-2 space-y-2">
+                                <p className="text-[10px] font-semibold text-[var(--text-muted)] uppercase tracking-wider">Hak Akses</p>
+                                <div className="grid grid-cols-1 gap-1">
+                                  {(Object.entries(ALL_PERMISSIONS) as [PermissionKey, string][]).map(([key, label]) => {
+                                    const isOn = perms[key] ?? false;
+                                    return (
+                                      <label key={key} className="flex items-center gap-2.5 cursor-pointer py-1 group">
+                                        {/* Toggle */}
+                                        <div
+                                          onClick={() => togglePerm(admin.id, key)}
+                                          className="w-8 h-4 rounded-full relative flex-shrink-0 transition-all cursor-pointer"
+                                          style={{ background: isOn ? "rgba(99,102,241,0.4)" : "rgba(255,255,255,0.08)", border: `1px solid ${isOn ? "rgba(99,102,241,0.6)" : "rgba(255,255,255,0.12)"}` }}
+                                        >
+                                          <span className="absolute top-0.5 w-3 h-3 rounded-full transition-all" style={{
+                                            background: isOn ? "#818cf8" : "rgba(255,255,255,0.25)",
+                                            left: isOn ? "calc(100% - 14px)" : "2px",
+                                          }} />
+                                        </div>
+                                        <span className={`text-xs ${isOn ? "text-white" : "text-[var(--text-muted)]"}`}>{label}</span>
+                                      </label>
+                                    );
+                                  })}
+                                </div>
+                                <button
+                                  onClick={() => handleSavePermissions(admin.id)}
+                                  disabled={isSaving}
+                                  className="w-full flex items-center justify-center gap-1.5 py-1.5 rounded-xl text-xs font-semibold transition-all"
+                                  style={{ background: "rgba(99,102,241,0.2)", border: "1px solid rgba(99,102,241,0.35)", color: "#818cf8" }}
+                                >
+                                  {isSaving ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}
+                                  Simpan Izin
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+
+                      {/* Developer Account info */}
+                      {adminUsers.filter(u => u.role === "developer").map(dev => (
+                        <div key={dev.id} className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl opacity-60" style={{ background: "rgba(245,158,11,0.05)", border: "1px solid rgba(245,158,11,0.15)" }}>
+                          <Shield size={14} className="text-amber-400 flex-shrink-0" />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-semibold text-white truncate">{dev.name} <span className="text-amber-400">(Developer)</span></p>
+                            <p className="text-[10px] text-[var(--text-muted)] truncate">{dev.email}</p>
+                          </div>
+                          <span className="text-[10px] text-amber-400 font-semibold">Full Access</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* ─── Right: Template Editor ───────────────────────────────────── */}
             {currentTab && (
+
               <div className="glass-card overflow-hidden flex flex-col" style={{ minHeight: 520 }}>
                 {/* Header */}
                 <div

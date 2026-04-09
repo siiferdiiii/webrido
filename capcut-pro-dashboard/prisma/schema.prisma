@@ -209,3 +209,19 @@ model AppSetting {
 
   @@map("app_settings")
 }
+
+// ===== Admin Users (Auth & RBAC) =====
+
+model AdminUser {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email       String   @unique @db.VarChar(255)
+  name        String   @db.VarChar(255)
+  password    String   @db.VarChar(255)
+  role        String   @default("admin") @map("role") @db.VarChar(50)
+  status      String   @default("inactive") @db.VarChar(50)
+  permissions Json?    // null = no access; JSON object per fitur
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@map("admin_users")
+}
