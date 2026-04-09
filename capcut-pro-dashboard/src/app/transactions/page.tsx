@@ -196,7 +196,7 @@ export default function TransactionsPage() {
       });
       const json = await res.json();
       if (res.ok) {
-        setResult({ success: true, userId: json.userId, message: json.message || "Transaksi berhasil dicatat!" });
+        setResult({ success: true, userId: json.userId, message: json.message || "Data transaksi berhasil ditambahkan, kirim data akun ke pelanggan?" });
         fetchData(1, false);
       } else {
         setResult({ message: json.error || "Gagal membuat transaksi" });

@@ -173,7 +173,7 @@ export async function POST(req: NextRequest) {
         email: availableAccount.accountEmail,
         password: availableAccount.accountPassword,
       },
-      message: "Transaksi berhasil! Kirim data akun ke pelanggan.",
+      message: "Data transaksi berhasil ditambahkan, kirim data akun ke pelanggan?",
     }, { status: 201 });
   } catch (error) {
     console.error("POST /api/transactions error:", error);
