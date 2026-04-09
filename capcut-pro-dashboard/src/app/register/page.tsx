@@ -168,7 +168,7 @@ export default function RegisterPage() {
             <UserPlus size={28} className="text-white" />
           </div>
           <h1 className="text-2xl font-bold text-white">Buat Akun</h1>
-          <p className="text-sm text-[rgba(255,255,255,0.4)] mt-1">CapCut Pro Dashboard</p>
+          <p className="text-sm text-[rgba(255,255,255,0.4)] mt-1">Dorizz Store Dashboard</p>
         </div>
 
         <div className="rounded-2xl p-6 space-y-5" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", backdropFilter: "blur(20px)" }}>

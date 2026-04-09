@@ -3,8 +3,8 @@ import "./globals.css";
 import LayoutWrapper from "@/components/LayoutWrapper";
 
 export const metadata: Metadata = {
-  title: "CapCut Pro Dashboard",
-  description: "Dashboard Pengelola Akun CapCut Pro - Manajemen Transaksi, User, dan Stok",
+  title: "Dorizz Store Dashboard",
+  description: "Dashboard Pengelola Dorizz Store - Manajemen Transaksi, Pelanggan, dan Stok Akun",
 };
 
 export default function RootLayout({

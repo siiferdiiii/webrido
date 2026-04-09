@@ -59,7 +59,7 @@ export default function LoginPage() {
             <Shield size={28} className="text-white" />
           </div>
           <h1 className="text-2xl font-bold text-white">Selamat Datang</h1>
-          <p className="text-sm text-[rgba(255,255,255,0.4)] mt-1">Masuk ke CapCut Pro Dashboard</p>
+          <p className="text-sm text-[rgba(255,255,255,0.4)] mt-1">Masuk ke Dorizz Store Dashboard</p>
         </div>
 
         {/* Card */}

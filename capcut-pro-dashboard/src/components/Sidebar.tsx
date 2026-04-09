@@ -19,6 +19,7 @@ import {
   X,
   Lock,
   ClipboardList,
+  ShoppingBag,
 } from "lucide-react";
 import type { PermissionKey } from "@/lib/auth-shared";
 
@@ -105,10 +106,10 @@ export default function Sidebar() {
               className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
               style={{ background: "var(--gradient-primary)" }}
             >
-              <Scissors size={18} className="text-white" />
+              <ShoppingBag size={18} className="text-white" />
             </div>
             <div>
-              <h1 className="text-base font-bold text-white tracking-tight">CapCut Pro</h1>
+              <h1 className="text-base font-bold text-white tracking-tight">Dorizz Store</h1>
               <p className="text-[11px] text-[var(--text-muted)]">Management Dashboard</p>
             </div>
           </div>
