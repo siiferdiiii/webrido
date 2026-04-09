@@ -197,7 +197,7 @@ export default function TransactionsPage() {
       const json = await res.json();
       if (res.ok) {
         setResult({ success: true, userId: json.userId, message: json.message || "Transaksi berhasil dicatat!" });
-        fetchData();
+        fetchData(1, false);
       } else {
         setResult({ message: json.error || "Gagal membuat transaksi" });
       }
@@ -434,7 +434,7 @@ export default function TransactionsPage() {
       ));
     }
 
-    fetchData();
+    fetchData(1, false);
     setImporting(false);
     setImportDone(true);
     setImportMinimized(false);
