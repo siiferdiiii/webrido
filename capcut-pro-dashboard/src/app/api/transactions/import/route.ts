@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/db";
 import { NextRequest, NextResponse } from "next/server";
+import { parseDuration, calcWarrantyExpiry } from "@/lib/duration";
 
 export const maxDuration = 60; // 60 detik (Vercel Pro) atau 10 detik (Hobby)
 export const dynamic = "force-dynamic";
@@ -133,8 +134,9 @@ export async function POST(req: NextRequest) {
         purchaseDate = new Date();
       }
 
-      const warrantyExpiredAt = new Date(purchaseDate);
-      warrantyExpiredAt.setDate(warrantyExpiredAt.getDate() + 30);
+      const durFromName = parseDuration(productName ?? "");
+      const days = durFromName > 0 ? durFromName : 30;
+      const warrantyExpiredAt = calcWarrantyExpiry(purchaseDate, days);
 
       parsedRows.push({ lynkId, email, name, phone, amount, purchaseDate, warrantyExpiredAt, productName });
     }

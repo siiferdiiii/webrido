@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/db";
 import { NextRequest, NextResponse } from "next/server";
 import { requirePermission } from "@/lib/auth";
+import { parseDuration, calcWarrantyExpiry } from "@/lib/duration";
 
 export const dynamic = 'force-dynamic';
 
@@ -85,7 +86,12 @@ export async function POST(req: NextRequest) {
   if ("error" in auth) return auth.error;
   try {
     const body = await req.json();
-    const { email, name, whatsapp, amount, productName, durationDays = 30 } = body;
+    const { email, name, whatsapp, amount, productName, durationDays: rawDuration = 30 } = body;
+
+    // Jika nama produk mengandung durasi (misal "1 bulan"), selalu pakai fix 30 hari
+    // bukan durationDays dari stok yang bisa salah (mis. 31 hari di bulan Maret)
+    const durationFromName = productName ? parseDuration(productName) : 0;
+    const durationDays = durationFromName > 0 ? durationFromName : rawDuration;
 
     if (!email || !name || !whatsapp) {
       return NextResponse.json({ error: "Email, nama, dan WhatsApp wajib diisi" }, { status: 400 });
@@ -126,9 +132,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Stok akun habis! Tidak ada akun tersedia." }, { status: 400 });
     }
 
-    // 3. Hitung tanggal expired garansi
-    const warrantyExpiredAt = new Date();
-    warrantyExpiredAt.setDate(warrantyExpiredAt.getDate() + durationDays);
+    // 3. Hitung tanggal expired garansi (fix days, bukan calendar month)
+    const warrantyExpiredAt = calcWarrantyExpiry(new Date(), durationDays);
 
     // 4. Buat transaksi
     const transaction = await prisma.transaction.create({

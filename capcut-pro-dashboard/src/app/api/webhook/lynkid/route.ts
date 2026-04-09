@@ -1,17 +1,6 @@
 import { prisma } from "@/lib/db";
 import { NextRequest, NextResponse } from "next/server";
-
-// Mapping durasi berdasarkan kata kunci di judul produk Lynk.id
-function parseDuration(title: string): number {
-  const lower = title.toLowerCase();
-  if (lower.includes("1 tahun") || lower.includes("12 bulan") || lower.includes("365")) return 365;
-  if (lower.includes("6 bulan") || lower.includes("180")) return 180;
-  if (lower.includes("3 bulan") || lower.includes("90")) return 90;
-  if (lower.includes("2 bulan") || lower.includes("60")) return 60;
-  if (lower.includes("1 bulan") || lower.includes("30")) return 30;
-  if (lower.includes("1 minggu") || lower.includes("7 hari")) return 7;
-  return 30;
-}
+import { parseDuration, calcWarrantyExpiry } from "@/lib/duration";
 
 // Deteksi tipe produk dari judul Lynk.id
 function parseProductType(title: string): "mobile" | "desktop" {
@@ -182,8 +171,7 @@ export async function POST(req: NextRequest) {
 
     // ===== 4. Buat transaksi =====
     const purchaseDate = messageData.createdAt ? new Date(messageData.createdAt) : new Date();
-    const warrantyExpiredAt = new Date(purchaseDate);
-    warrantyExpiredAt.setDate(warrantyExpiredAt.getDate() + durationDays);
+    const warrantyExpiredAt = calcWarrantyExpiry(purchaseDate, durationDays);
 
     const transaction = await prisma.transaction.create({
       data: {
