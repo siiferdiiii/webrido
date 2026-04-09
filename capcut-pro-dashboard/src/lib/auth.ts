@@ -1,7 +1,14 @@
+import "server-only"; // Prevent this file from being imported in Client Components
+
 import { SignJWT, jwtVerify } from "jose";
 import bcrypt from "bcryptjs";
 import { cookies } from "next/headers";
 import { prisma } from "@/lib/db";
+import { NextResponse } from "next/server";
+
+// Re-export shared constants so server code can still import from "@/lib/auth"
+export { ALL_PERMISSIONS, DEFAULT_ADMIN_PERMISSIONS } from "@/lib/auth-shared";
+export type { PermissionKey } from "@/lib/auth-shared";
 
 // ─── Config ──────────────────────────────────────────────────────────────────
 
@@ -11,39 +18,9 @@ const JWT_SECRET = new TextEncoder().encode(
 const COOKIE_NAME = "admin_token";
 const TOKEN_EXPIRY = "7d";
 
-// ─── Permission Keys ─────────────────────────────────────────────────────────
-
-export const ALL_PERMISSIONS = {
-  page_transactions: "Halaman Transaksi",
-  page_customers: "Halaman Pelanggan",
-  page_stock: "Halaman Stok Akun",
-  page_followup: "Halaman Follow-Up",
-  page_retention: "Analisis Retensi",
-  page_affiliates: "Halaman Afiliator",
-  page_messages: "Riwayat Pesan",
-  page_settings: "Halaman Settings",
-  export_data: "Export CSV",
-  import_data: "Import CSV/Excel",
-  delete_data: "Hapus Data",
-} as const;
-
-export type PermissionKey = keyof typeof ALL_PERMISSIONS;
-
-export const DEFAULT_ADMIN_PERMISSIONS: Record<PermissionKey, boolean> = {
-  page_transactions: true,
-  page_customers: true,
-  page_stock: false,
-  page_followup: true,
-  page_retention: true,
-  page_affiliates: false,
-  page_messages: true,
-  page_settings: false,
-  export_data: true,
-  import_data: false,
-  delete_data: false,
-};
-
 // ─── Types ───────────────────────────────────────────────────────────────────
+
+import type { PermissionKey } from "@/lib/auth-shared";
 
 export interface AuthPayload {
   id: string;
@@ -99,7 +76,7 @@ export async function setAuthCookie(token: string) {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",
-    maxAge: 60 * 60 * 24 * 7, // 7 days
+    maxAge: 60 * 60 * 24 * 7,
     path: "/",
   });
 }
@@ -114,7 +91,7 @@ export async function getAuthCookie(): Promise<string | null> {
   return cookieStore.get(COOKIE_NAME)?.value || null;
 }
 
-// ─── Get current user from request/cookies ────────────────────────────────────
+// ─── Get current user ────────────────────────────────────────────────────────
 
 export async function getAuthUser(): Promise<AuthPayload | null> {
   const token = await getAuthCookie();
@@ -129,21 +106,18 @@ export function hasPermission(
   permissions: Record<string, boolean> | null,
   key: PermissionKey
 ): boolean {
-  if (user.role === "developer") return true; // Developer = full access
+  if (user.role === "developer") return true;
   if (!permissions) return false;
   return permissions[key] === true;
 }
 
 // ─── Auth Guards (for API routes) ────────────────────────────────────────────
 
-import { NextResponse } from "next/server";
-
 export async function requireAuth(): Promise<{ user: AuthPayload; error?: never } | { user?: never; error: NextResponse }> {
   const user = await getAuthUser();
   if (!user) {
     return { error: NextResponse.json({ error: "Unauthorized" }, { status: 401 }) };
   }
-  // Verify user still exists & active in DB
   const dbUser = await prisma.adminUser.findUnique({ where: { id: user.id } });
   if (!dbUser || dbUser.status !== "active") {
     return { error: NextResponse.json({ error: "Akun tidak aktif atau tidak ditemukan" }, { status: 401 }) };

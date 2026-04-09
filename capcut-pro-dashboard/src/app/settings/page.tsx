@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import Topbar from "@/components/Topbar";
 import { useAuth } from "@/context/AuthContext";
-import { ALL_PERMISSIONS, PermissionKey, DEFAULT_ADMIN_PERMISSIONS } from "@/lib/auth";
+import { ALL_PERMISSIONS, PermissionKey, DEFAULT_ADMIN_PERMISSIONS } from "@/lib/auth-shared";
 import {
   Settings,
   Save,

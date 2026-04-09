@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from "react";
-import { PermissionKey } from "@/lib/auth";
+import type { PermissionKey } from "@/lib/auth-shared";
 
 interface AuthUser {
   id: string;

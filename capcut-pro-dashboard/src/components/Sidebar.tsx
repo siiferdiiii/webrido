@@ -19,7 +19,7 @@ import {
   X,
   Lock,
 } from "lucide-react";
-import { PermissionKey } from "@/lib/auth";
+import type { PermissionKey } from "@/lib/auth-shared";
 
 // ─── Navigation config ────────────────────────────────────────────────────────
 
