@@ -51,6 +51,30 @@ export default function AbsensiPage() {
   const [assigningTaskId, setAssigningTaskId] = useState<string | null>(null);
   const [selectedAdmins, setSelectedAdmins] = useState<Record<string, boolean>>({});
 
+  // ── Admin detail (Rekap tab) ──
+  type AdminDetail = {
+    admin: AdminUser & { role: string };
+    schedule: Schedule | null;
+    attendance: { checkInAt: string | null; checkOutAt: string | null; webhookSentIn: boolean; webhookSentOut: boolean } | null;
+    assignments: (TaskAssignment & { task: { title: string; description: string | null; recurrenceType: string } })[]; 
+    summary: { total: number; done: number; pending: number; completionPct: number };
+  };
+  const [expandedAdminId, setExpandedAdminId] = useState<string | null>(null);
+  const [adminDetailMap, setAdminDetailMap] = useState<Record<string, AdminDetail>>({});
+  const [loadingDetailId, setLoadingDetailId] = useState<string | null>(null);
+
+  async function fetchAdminDetail(adminId: string) {
+    if (loadingDetailId) return;
+    if (expandedAdminId === adminId) { setExpandedAdminId(null); return; }
+    setLoadingDetailId(adminId);
+    try {
+      const res = await fetch(`/api/admin/users/${adminId}/tasks?date=${rekapDate}`);
+      const data = await res.json();
+      setAdminDetailMap(prev => ({ ...prev, [adminId]: data }));
+      setExpandedAdminId(adminId);
+    } finally { setLoadingDetailId(null); }
+  }
+
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
@@ -396,49 +420,148 @@ export default function AbsensiPage() {
             {/* ── TAB: REKAP ── */}
             {activeTab === "rekap" && (
               <div className="space-y-4">
+                {/* Date picker */}
                 <div className="flex items-center gap-3 flex-wrap">
-                  <input type="date" className="form-input text-sm" value={rekapDate} onChange={e => { setRekapDate(e.target.value); }} />
-                  <button onClick={loadData} className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold text-white" style={{ background: "var(--gradient-primary)" }}>
+                  <input type="date" className="form-input text-sm" value={rekapDate} onChange={e => setRekapDate(e.target.value)} />
+                  <button onClick={() => { setExpandedAdminId(null); setAdminDetailMap({}); loadData(); }}
+                    className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold text-white"
+                    style={{ background: "var(--gradient-primary)" }}>
                     <RefreshCw size={13} /> Tampilkan
                   </button>
+                  <p className="text-xs text-[var(--text-muted)] ml-auto">{adminUsers.length} admin aktif</p>
                 </div>
-                {attendanceRecords.length === 0 ? (
+
+                {adminUsers.length === 0 && (
                   <div className="glass-card p-10 text-center">
-                    <Calendar size={36} className="mx-auto mb-3 opacity-20" />
-                    <p className="text-sm text-[var(--text-muted)]">Tidak ada data absensi untuk {rekapDate}.</p>
-                  </div>
-                ) : (
-                  <div className="grid gap-3">
-                    {attendanceRecords.map(rec => (
-                      <div key={rec.id} className="glass-card p-4 flex items-center gap-4 flex-wrap">
-                        <div className="w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold text-white flex-shrink-0"
-                          style={{ background: "var(--gradient-primary)" }}>
-                          {rec.admin.name.slice(0, 2).toUpperCase()}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-semibold text-white">{rec.admin.name}</p>
-                          <p className="text-xs text-[var(--text-muted)]">{rec.admin.whatsapp || rec.admin.email}</p>
-                        </div>
-                        <div className="text-right text-xs space-y-0.5">
-                          <div className="flex items-center gap-1.5 justify-end">
-                            <span className="text-[var(--text-muted)]">Masuk:</span>
-                            <span className={rec.checkInAt ? "text-emerald-400 font-mono" : "text-rose-400"}>
-                              {rec.checkInAt ? fmtTime(rec.checkInAt) : "–"}
-                            </span>
-                            {rec.webhookSentIn && <Check size={11} className="text-emerald-400" />}
-                          </div>
-                          <div className="flex items-center gap-1.5 justify-end">
-                            <span className="text-[var(--text-muted)]">Keluar:</span>
-                            <span className={rec.checkOutAt ? "text-indigo-400 font-mono" : "text-[var(--text-muted)]"}>
-                              {rec.checkOutAt ? fmtTime(rec.checkOutAt) : "–"}
-                            </span>
-                            {rec.webhookSentOut && <Check size={11} className="text-indigo-400" />}
-                          </div>
-                        </div>
-                      </div>
-                    ))}
+                    <Users size={36} className="mx-auto mb-3 opacity-20" />
+                    <p className="text-sm text-[var(--text-muted)]">Belum ada admin aktif.</p>
                   </div>
                 )}
+
+                {/* Admin cards */}
+                <div className="space-y-3">
+                  {adminUsers.map(admin => {
+                    const att = attendanceRecords.find(r => r.adminId === admin.id);
+                    const sched = schedules[admin.id];
+                    const detail = adminDetailMap[admin.id];
+                    const isExpanded = expandedAdminId === admin.id;
+                    const isLoadingThis = loadingDetailId === admin.id;
+                    const pct = detail?.summary.completionPct ?? null;
+
+                    return (
+                      <div key={admin.id} className="glass-card overflow-hidden">
+                        {/* ── Header row — clickable ── */}
+                        <div
+                          onClick={() => fetchAdminDetail(admin.id)}
+                          className="p-4 flex items-center gap-3 cursor-pointer hover:bg-white/[0.02] transition-all select-none">
+                          {/* Avatar */}
+                          <div className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold text-white flex-shrink-0"
+                            style={{ background: "var(--gradient-primary)" }}>
+                            {admin.name.slice(0, 2).toUpperCase()}
+                          </div>
+
+                          {/* Info */}
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-semibold text-white">{admin.name}</p>
+                            <p className="text-xs text-[var(--text-muted)]">{admin.whatsapp || admin.email}</p>
+                            {sched && (
+                              <p className="text-[10px] text-[var(--text-muted)] font-mono mt-0.5">
+                                🕐 {sched.shiftStart} – {sched.shiftEnd}
+                              </p>
+                            )}
+                          </div>
+
+                          {/* Check-in/out badges */}
+                          <div className="text-right text-xs space-y-1 mr-2">
+                            <div className="flex items-center gap-1.5 justify-end">
+                              <span className="text-[var(--text-muted)]">In:</span>
+                              <span className={att?.checkInAt ? "text-emerald-400 font-mono font-semibold" : "text-[var(--text-muted)]"}
+                              >{att?.checkInAt ? fmtTime(att.checkInAt) : "–"}</span>
+                            </div>
+                            <div className="flex items-center gap-1.5 justify-end">
+                              <span className="text-[var(--text-muted)]">Out:</span>
+                              <span className={att?.checkOutAt ? "text-indigo-400 font-mono font-semibold" : "text-[var(--text-muted)]"}
+                              >{att?.checkOutAt ? fmtTime(att.checkOutAt) : "–"}</span>
+                            </div>
+                          </div>
+
+                          {/* Expand chevron / loader */}
+                          {isLoadingThis
+                            ? <Loader2 size={16} className="animate-spin text-[var(--text-muted)] flex-shrink-0" />
+                            : <ChevronRight size={16} className="flex-shrink-0 transition-transform text-[var(--text-muted)]" style={{ transform: isExpanded ? "rotate(90deg)" : "rotate(0deg)" }} />
+                          }
+                        </div>
+
+                        {/* ── Expanded detail panel ── */}
+                        {isExpanded && detail && (
+                          <div className="border-t px-4 pb-4 pt-3 space-y-3" style={{ borderColor: "rgba(255,255,255,0.06)" }}>
+                            {/* Summary stats */}
+                            <div className="grid grid-cols-3 gap-2">
+                              {[
+                                { label: "Total", val: detail.summary.total, color: "text-white" },
+                                { label: "Selesai", val: detail.summary.done, color: "text-emerald-400" },
+                                { label: "Pending", val: detail.summary.pending, color: "text-amber-400" },
+                              ].map(s => (
+                                <div key={s.label} className="text-center p-2 rounded-xl" style={{ background: "rgba(255,255,255,0.04)" }}>
+                                  <p className={`text-lg font-bold ${s.color}`}>{s.val}</p>
+                                  <p className="text-[10px] text-[var(--text-muted)] uppercase">{s.label}</p>
+                                </div>
+                              ))}
+                            </div>
+
+                            {/* Progress bar */}
+                            {detail.summary.total > 0 && (
+                              <div>
+                                <div className="flex justify-between text-[10px] text-[var(--text-muted)] mb-1">
+                                  <span>Progress</span>
+                                  <span>{pct}%</span>
+                                </div>
+                                <div className="h-2 rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.08)" }}>
+                                  <div className="h-full rounded-full transition-all duration-700"
+                                    style={{ width: `${pct}%`, background: pct === 100 ? "linear-gradient(90deg,#22c55e,#16a34a)" : "var(--gradient-primary)" }} />
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Task list */}
+                            {detail.assignments.length === 0 ? (
+                              <p className="text-xs text-[var(--text-muted)] text-center py-2">Tidak ada tugas untuk tanggal ini.</p>
+                            ) : (
+                              <div className="space-y-1.5">
+                                <p className="text-[10px] text-[var(--text-muted)] uppercase font-semibold">Daftar Tugas</p>
+                                {detail.assignments.map(a => (
+                                  <div key={a.id} className="flex items-start gap-2.5 p-2.5 rounded-xl"
+                                    style={{ background: a.status === "done" ? "rgba(34,197,94,0.05)" : "rgba(255,255,255,0.03)", border: `1px solid ${a.status === "done" ? "rgba(34,197,94,0.15)" : "rgba(255,255,255,0.06)"}` }}>
+                                    <div className="flex-shrink-0 mt-0.5">
+                                      {a.status === "done"
+                                        ? <CheckCircle2 size={15} className="text-emerald-400" />
+                                        : <Circle size={15} className="text-[var(--text-muted)]" />
+                                      }
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                      <p className={`text-xs font-medium ${a.status === "done" ? "line-through text-[var(--text-muted)]" : "text-white"}`}>
+                                        {a.task.title}
+                                      </p>
+                                      {a.task.description && (
+                                        <p className="text-[10px] text-[var(--text-muted)]">{a.task.description}</p>
+                                      )}
+                                      {a.completedAt && (
+                                        <p className="text-[10px] text-emerald-400">✓ {fmtTime(a.completedAt)}</p>
+                                      )}
+                                    </div>
+                                    <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full flex-shrink-0 ${
+                                      a.status === "done" ? "bg-emerald-500/10 text-emerald-400" : "bg-amber-500/10 text-amber-400"
+                                    }`}>{a.status === "done" ? "Selesai" : "Pending"}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             )}
           </>
