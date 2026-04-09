@@ -17,6 +17,11 @@ import {
   Eye,
   Info,
   Clock,
+  Tag,
+  Plus,
+  Trash2,
+  Pencil,
+  X,
 } from "lucide-react";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -28,6 +33,20 @@ interface AppSettings {
   template_warranty: string;
   template_promo: string;
 }
+
+interface TagItem {
+  id: string;
+  name: string;
+  color: string;
+  _count?: { customers: number };
+}
+
+const PRESET_COLORS = [
+  "#818cf8","#6366f1","#8b5cf6","#a855f7",
+  "#ec4899","#ef4444","#f97316","#f59e0b",
+  "#eab308","#84cc16","#22c55e","#10b981",
+  "#14b8a6","#06b6d4","#3b82f6","#6b7280",
+];
 
 const DEFAULT_SETTINGS: AppSettings = {
   customer_active_days: "60",
@@ -109,6 +128,18 @@ export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState<keyof AppSettings>("template_followup");
   const [showPreview, setShowPreview] = useState(false);
 
+  // ── Tag state ──────────────────────────────────────────────────────────────
+  const [tags, setTags] = useState<TagItem[]>([]);
+  const [loadingTags, setLoadingTags] = useState(false);
+  const [newTagName, setNewTagName] = useState("");
+  const [newTagColor, setNewTagColor] = useState(PRESET_COLORS[0]);
+  const [editingTagId, setEditingTagId] = useState<string | null>(null);
+  const [editingName, setEditingName] = useState("");
+  const [editingColor, setEditingColor] = useState("");
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [savingTag, setSavingTag] = useState(false);
+  const [tagError, setTagError] = useState("");
+
   const fetchSettings = useCallback(async () => {
     setLoading(true);
     try {
@@ -123,9 +154,78 @@ export default function SettingsPage() {
     }
   }, []);
 
+  const fetchTags = useCallback(async () => {
+    setLoadingTags(true);
+    try {
+      const res = await fetch("/api/tags");
+      const json = await res.json();
+      setTags(json.tags || []);
+    } catch (e) {
+      console.error("Failed to load tags:", e);
+    } finally {
+      setLoadingTags(false);
+    }
+  }, []);
+
   useEffect(() => { fetchSettings(); }, [fetchSettings]);
+  useEffect(() => { fetchTags(); }, [fetchTags]);
 
   const isDirty = JSON.stringify(settings) !== JSON.stringify(original);
+
+  // ── Tag CRUD ───────────────────────────────────────────────────────────────
+
+  async function handleCreateTag() {
+    if (!newTagName.trim()) { setTagError("Nama label wajib diisi"); return; }
+    setSavingTag(true); setTagError("");
+    try {
+      const res = await fetch("/api/tags", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: newTagName.trim(), color: newTagColor }),
+      });
+      const json = await res.json();
+      if (!res.ok) { setTagError(json.error || "Gagal membuat label"); return; }
+      setNewTagName("");
+      setNewTagColor(PRESET_COLORS[0]);
+      fetchTags();
+    } catch { setTagError("Terjadi kesalahan"); }
+    setSavingTag(false);
+  }
+
+  function startEditTag(tag: TagItem) {
+    setEditingTagId(tag.id);
+    setEditingName(tag.name);
+    setEditingColor(tag.color);
+    setDeleteConfirmId(null);
+    setTagError("");
+  }
+
+  async function handleUpdateTag() {
+    if (!editingTagId || !editingName.trim()) return;
+    setSavingTag(true); setTagError("");
+    try {
+      const res = await fetch(`/api/tags/${editingTagId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: editingName.trim(), color: editingColor }),
+      });
+      const json = await res.json();
+      if (!res.ok) { setTagError(json.error || "Gagal update label"); return; }
+      setEditingTagId(null);
+      fetchTags();
+    } catch { setTagError("Terjadi kesalahan"); }
+    setSavingTag(false);
+  }
+
+  async function handleDeleteTag(id: string) {
+    setSavingTag(true);
+    try {
+      await fetch(`/api/tags/${id}`, { method: "DELETE" });
+      setDeleteConfirmId(null);
+      fetchTags();
+    } catch { }
+    setSavingTag(false);
+  }
 
   async function handleSave() {
     setSaving(true);
@@ -250,6 +350,195 @@ export default function SettingsPage() {
                       Lebih dari itu = <span className="text-rose-400 font-semibold">Tidak Aktif</span>
                     </p>
                   </div>
+                </div>
+              </div>
+
+              {/* Section: Label Pelanggan */}
+              <div className="glass-card p-5">
+                <div className="flex items-center gap-2 mb-4">
+                  <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: "rgba(99,102,241,0.15)" }}>
+                    <Tag size={16} className="text-[#818cf8]" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-sm font-semibold text-white">Label Pelanggan</p>
+                    <p className="text-[11px] text-[var(--text-muted)]">Buat &amp; kelola label untuk kategorisasi</p>
+                  </div>
+                  <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ background: "rgba(99,102,241,0.15)", color: "#818cf8" }}>{tags.length}</span>
+                </div>
+
+                {/* Existing Tags */}
+                <div className="space-y-1.5 mb-3 max-h-60 overflow-y-auto pr-0.5">
+                  {loadingTags ? (
+                    <div className="flex justify-center py-3"><Loader2 size={16} className="animate-spin text-[#818cf8]" /></div>
+                  ) : tags.length === 0 ? (
+                    <p className="text-xs text-[var(--text-muted)] text-center py-3">Belum ada label. Buat yang pertama di bawah.</p>
+                  ) : (
+                    tags.map(tag => editingTagId === tag.id ? (
+                      /* ── Edit mode ─────────────────────────── */
+                      <div
+                        key={tag.id}
+                        className="p-2.5 rounded-xl space-y-2"
+                        style={{ background: "rgba(99,102,241,0.08)", border: "1px solid rgba(99,102,241,0.2)" }}
+                      >
+                        <input
+                          className="form-input text-sm h-8 w-full"
+                          value={editingName}
+                          onChange={e => setEditingName(e.target.value)}
+                          placeholder="Nama label"
+                          autoFocus
+                        />
+                        <div className="flex flex-wrap gap-1">
+                          {PRESET_COLORS.map(c => (
+                            <button
+                              key={c}
+                              onClick={() => setEditingColor(c)}
+                              className="rounded transition-all"
+                              style={{
+                                width: 20, height: 20, background: c, flexShrink: 0,
+                                outline: editingColor === c ? `2px solid white` : "none",
+                                outlineOffset: 1,
+                              }}
+                            />
+                          ))}
+                        </div>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={handleUpdateTag}
+                            disabled={savingTag}
+                            className="flex-1 flex items-center justify-center gap-1.5 h-7 rounded-lg text-xs font-semibold"
+                            style={{ background: `${editingColor}20`, border: `1px solid ${editingColor}40`, color: editingColor }}
+                          >
+                            {savingTag ? <Loader2 size={11} className="animate-spin" /> : <Check size={11} />} Simpan
+                          </button>
+                          <button
+                            onClick={() => { setEditingTagId(null); setTagError(""); }}
+                            className="flex items-center justify-center h-7 px-2 rounded-lg"
+                            style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", color: "var(--text-muted)" }}
+                          >
+                            <X size={12} />
+                          </button>
+                        </div>
+                      </div>
+                    ) : deleteConfirmId === tag.id ? (
+                      /* ── Delete confirm ─────────────────────── */
+                      <div
+                        key={tag.id}
+                        className="flex items-center gap-2 px-2.5 py-2 rounded-xl"
+                        style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)" }}
+                      >
+                        <span className="text-xs text-rose-300 flex-1">Hapus &ldquo;{tag.name}&rdquo;? ({tag._count?.customers || 0} pelanggan)</span>
+                        <button onClick={() => handleDeleteTag(tag.id)} disabled={savingTag} className="text-[11px] font-semibold text-rose-400 hover:text-rose-300 transition-colors">
+                          {savingTag ? <Loader2 size={11} className="animate-spin" /> : "Ya"}
+                        </button>
+                        <button onClick={() => setDeleteConfirmId(null)} className="text-[11px] text-[var(--text-muted)] hover:text-white transition-colors">Batal</button>
+                      </div>
+                    ) : (
+                      /* ── Normal row ─────────────────────────── */
+                      <div
+                        key={tag.id}
+                        className="flex items-center gap-2.5 px-2.5 py-2 rounded-xl group transition-colors hover:bg-white/[0.03]"
+                        style={{ border: "1px solid rgba(255,255,255,0.05)" }}
+                      >
+                        <span
+                          className="w-3 h-3 rounded-full flex-shrink-0"
+                          style={{ background: tag.color }}
+                        />
+                        <span className="text-sm font-medium text-white flex-1 truncate">{tag.name}</span>
+                        {(tag._count?.customers ?? 0) > 0 && (
+                          <span
+                            className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full flex-shrink-0"
+                            style={{ background: `${tag.color}18`, color: tag.color }}
+                          >
+                            {tag._count!.customers} pelanggan
+                          </span>
+                        )}
+                        <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button
+                            onClick={() => startEditTag(tag)}
+                            className="btn-icon"
+                            style={{ width: 26, height: 26 }}
+                            title="Edit label"
+                          >
+                            <Pencil size={12} />
+                          </button>
+                          <button
+                            onClick={() => { setDeleteConfirmId(tag.id); setEditingTagId(null); }}
+                            className="btn-icon hover:text-rose-400 hover:bg-rose-500/10"
+                            style={{ width: 26, height: 26 }}
+                            title="Hapus label"
+                          >
+                            <Trash2 size={12} />
+                          </button>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+
+                {/* Error */}
+                {tagError && (
+                  <p className="text-xs text-rose-400 mb-2">{tagError}</p>
+                )}
+
+                {/* Create New */}
+                <div className="pt-3 border-t border-[rgba(255,255,255,0.06)] space-y-2">
+                  <p className="text-[10px] font-semibold text-[var(--text-muted)] uppercase tracking-wider">Buat Label Baru</p>
+                  {/* Color picker */}
+                  <div className="flex flex-wrap gap-1">
+                    {PRESET_COLORS.map(c => (
+                      <button
+                        key={c}
+                        onClick={() => setNewTagColor(c)}
+                        className="rounded transition-all"
+                        style={{
+                          width: 20, height: 20, background: c, flexShrink: 0,
+                          outline: newTagColor === c ? `2px solid white` : "none",
+                          outlineOffset: 1,
+                        }}
+                      />
+                    ))}
+                  </div>
+                  {/* Name input + add button */}
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      className="form-input text-sm flex-1"
+                      placeholder="Nama label baru..."
+                      value={newTagName}
+                      onChange={e => { setNewTagName(e.target.value); setTagError(""); }}
+                      onKeyDown={e => { if (e.key === "Enter") handleCreateTag(); }}
+                    />
+                    <button
+                      onClick={handleCreateTag}
+                      disabled={savingTag || !newTagName.trim()}
+                      className="flex items-center justify-center gap-1.5 px-3 rounded-xl text-sm font-semibold transition-all disabled:opacity-40"
+                      style={{
+                        background: `${newTagColor}22`,
+                        border: `1px solid ${newTagColor}44`,
+                        color: newTagColor,
+                        minWidth: 72,
+                      }}
+                    >
+                      {savingTag ? <Loader2 size={13} className="animate-spin" /> : <Plus size={13} />}
+                      {savingTag ? "" : "Tambah"}
+                    </button>
+                  </div>
+                  {/* Preview of the new tag */}
+                  {newTagName.trim() && (
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[10px] text-[var(--text-muted)]">Preview:</span>
+                      <span
+                        className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full"
+                        style={{
+                          background: `${newTagColor}22`,
+                          color: newTagColor,
+                          border: `1px solid ${newTagColor}44`,
+                        }}
+                      >
+                        {newTagName.trim()}
+                      </span>
+                    </div>
+                  )}
                 </div>
               </div>
 
