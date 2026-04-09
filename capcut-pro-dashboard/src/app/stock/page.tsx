@@ -19,6 +19,8 @@ import {
   ShoppingBag,
   CalendarDays,
   Shield,
+  Trash2,
+  AlertTriangle,
 } from "lucide-react";
 
 interface StockTransaction {
@@ -270,6 +272,31 @@ export default function StockPage() {
   // Cek Pengguna modal
   const [checkAccount, setCheckAccount] = useState<StockItem | null>(null);
 
+  // Delete state
+  const [deleteConfirm, setDeleteConfirm] = useState<StockItem | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  async function handleDelete() {
+    if (!deleteConfirm) return;
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      const res = await fetch(`/api/stock/${deleteConfirm.id}`, { method: "DELETE" });
+      const json = await res.json();
+      if (!res.ok) {
+        setDeleteError(json.error || "Gagal menghapus akun");
+        setDeleting(false);
+        return;
+      }
+      setDeleteConfirm(null);
+      fetchData();
+    } catch {
+      setDeleteError("Terjadi kesalahan jaringan");
+    }
+    setDeleting(false);
+  }
+
   const fetchData = useCallback(() => {
     setLoading(true);
     const params = new URLSearchParams();
@@ -407,26 +434,28 @@ export default function StockPage() {
           </div>
         </div>
 
-        {/* Actions */}
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center gap-3 flex-1 min-w-0">
-            <div className="search-box flex-1 max-w-md">
+        {/* ── Actions toolbar ─────────────────────────────────────────── */}
+        <div className="space-y-3">
+          {/* Row 1: Search + Buttons */}
+          <div className="flex items-center gap-3 flex-wrap">
+            <div className="search-box flex-1 min-w-[160px] max-w-md">
               <Search size={16} className="search-icon" />
               <input type="text" placeholder="Cari email akun..." className="form-input !pl-10" value={search} onChange={(e) => setSearch(e.target.value)} />
             </div>
-            <div className="filter-pills-scroll">
-              <div className="filter-pills flex-nowrap">
-                {statusFilters.map((f) => (
-                  <button key={f} className={`filter-pill flex-shrink-0 ${statusFilter === f ? "active" : ""}`} onClick={() => setStatusFilter(f)}>
-                    {statusLabels[f]}
-                  </button>
-                ))}
-              </div>
+            <div className="flex gap-2 ml-auto">
+              <button className="btn-secondary" onClick={() => setShowBulkModal(true)}><Upload size={16} /> <span className="hidden sm:inline">Bulk Import</span></button>
+              <button className="btn-primary" onClick={() => setShowSingleModal(true)}><Plus size={16} /> <span className="hidden sm:inline">Tambah Akun</span></button>
             </div>
           </div>
-          <div className="flex gap-2">
-            <button className="btn-secondary" onClick={() => setShowBulkModal(true)}><Upload size={16} /> Bulk Import</button>
-            <button className="btn-primary" onClick={() => setShowSingleModal(true)}><Plus size={16} /> Tambah Akun</button>
+          {/* Row 2: Filter pills — always full width */}
+          <div className="filter-pills-scroll">
+            <div className="filter-pills flex-nowrap">
+              {statusFilters.map((f) => (
+                <button key={f} className={`filter-pill flex-shrink-0 ${statusFilter === f ? "active" : ""}`} onClick={() => setStatusFilter(f)}>
+                  {statusLabels[f]}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 
@@ -461,6 +490,7 @@ export default function StockPage() {
                         <th>Pengguna</th>
                         <th>Ditambahkan</th>
                         <th className="sticky-col-head">Status</th>
+                        <th>Aksi</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -509,6 +539,16 @@ export default function StockPage() {
                             </td>
                             <td className="text-[var(--text-secondary)] text-sm">{item.createdAt ? new Date(item.createdAt).toLocaleDateString("id-ID") : "—"}</td>
                             <td className="sticky-col-body">{getStockBadge(item.status)}</td>
+                            <td>
+                              <button
+                                onClick={() => { setDeleteConfirm(item); setDeleteError(null); }}
+                                className="btn-icon hover:text-rose-400 hover:bg-rose-500/10"
+                                style={{ width: 30, height: 30 }}
+                                title="Hapus akun"
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            </td>
                           </tr>
                         );
                       })}
@@ -564,6 +604,14 @@ export default function StockPage() {
                             ) : <span className="data-card-value">—</span>}
                           </div>
                           <div className="data-card-row"><span className="data-card-label">Ditambahkan</span><span className="data-card-value">{item.createdAt ? new Date(item.createdAt).toLocaleDateString("id-ID") : "—"}</span></div>
+                          <div className="pt-2 border-t border-[rgba(99,102,241,0.08)] mt-1">
+                            <button
+                              onClick={() => { setDeleteConfirm(item); setDeleteError(null); }}
+                              className="flex items-center gap-1.5 text-xs font-medium text-rose-400 hover:text-rose-300 transition-colors"
+                            >
+                              <Trash2 size={13} /> Hapus Akun
+                            </button>
+                          </div>
                         </div>
                       </div>
                     );
@@ -671,6 +719,100 @@ export default function StockPage() {
             <div className="modal-footer">
               <button className="btn-secondary" onClick={() => setShowBulkModal(false)}>Batal</button>
               <button className="btn-primary" onClick={handleBulkImport} disabled={submitting}>{submitting ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />} Import Semua</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Modal Konfirmasi Hapus */}
+      {deleteConfirm && (
+        <div className="modal-overlay" onClick={() => { if (!deleting) { setDeleteConfirm(null); setDeleteError(null); } }}>
+          <div
+            className="modal-content"
+            style={{ maxWidth: 420 }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="modal-header">
+              <div className="flex items-center gap-2">
+                <div className="w-9 h-9 rounded-xl bg-rose-500/15 flex items-center justify-center flex-shrink-0">
+                  <AlertTriangle size={18} className="text-rose-400" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-white">Hapus Stok Akun?</h3>
+                  <p className="text-xs text-[var(--text-muted)]">Tindakan ini tidak bisa dibatalkan</p>
+                </div>
+              </div>
+              <button className="btn-icon" onClick={() => { setDeleteConfirm(null); setDeleteError(null); }} disabled={deleting}>
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="modal-body space-y-4">
+              {/* Akun info */}
+              <div
+                className="p-3 rounded-xl"
+                style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}
+              >
+                <p className="text-xs text-[var(--text-muted)] mb-1">Akun yang akan dihapus:</p>
+                <p className="font-mono text-sm text-white">{deleteConfirm.accountEmail}</p>
+                <div className="flex items-center gap-3 mt-2">
+                  {getStockBadge(deleteConfirm.status)}
+                  <span className="text-xs text-[var(--text-muted)]">
+                    {deleteConfirm.usedSlots || 0}/{deleteConfirm.maxSlots || 3} slot terpakai
+                  </span>
+                </div>
+              </div>
+
+              {/* Warning jika ada slot terpakai */}
+              {(deleteConfirm.usedSlots ?? 0) > 0 && (
+                <div
+                  className="flex items-start gap-2 p-3 rounded-xl"
+                  style={{ background: "rgba(251,191,36,0.08)", border: "1px solid rgba(251,191,36,0.2)" }}
+                >
+                  <AlertTriangle size={14} className="text-amber-400 flex-shrink-0 mt-0.5" />
+                  <p className="text-xs text-amber-300">
+                    Akun ini masih dipakai <strong>{deleteConfirm.usedSlots} pelanggan</strong>.
+                    Pastikan slot sudah tidak aktif sebelum menghapus, atau akun
+                    {" "}
+                    <span className="text-rose-400 font-semibold">in_use</span> tidak dapat dihapus.
+                  </p>
+                </div>
+              )}
+
+              {/* Error message */}
+              {deleteError && (
+                <div
+                  className="flex items-start gap-2 p-3 rounded-xl"
+                  style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)" }}
+                >
+                  <AlertTriangle size={14} className="text-rose-400 flex-shrink-0 mt-0.5" />
+                  <p className="text-xs text-rose-300">{deleteError}</p>
+                </div>
+              )}
+            </div>
+
+            <div className="modal-footer">
+              <button
+                className="btn-secondary"
+                onClick={() => { setDeleteConfirm(null); setDeleteError(null); }}
+                disabled={deleting}
+              >
+                Batal
+              </button>
+              <button
+                onClick={handleDelete}
+                disabled={deleting}
+                className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold text-white transition-all"
+                style={{
+                  background: "linear-gradient(135deg,#ef4444,#dc2626)",
+                  border: "1px solid rgba(239,68,68,0.4)",
+                  boxShadow: "0 4px 15px rgba(239,68,68,0.25)",
+                  cursor: deleting ? "wait" : "pointer",
+                  opacity: deleting ? 0.7 : 1,
+                }}
+              >
+                {deleting ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                {deleting ? "Menghapus..." : "Ya, Hapus Akun"}
+              </button>
             </div>
           </div>
         </div>
