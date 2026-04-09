@@ -76,20 +76,24 @@ export async function GET(req: NextRequest) {
 
     // ── Last transaction date range ───────────────────────────────────────────
     // Filter users whose LAST SUCCESS transaction date is in [from, to].
-    // Dates are treated as WIB (UTC+7) to match browser display and Lynk.id CSV dates.
+    //
+    // IMPORTANT: Lynk.id CSV dates are imported WITHOUT timezone conversion
+    // (e.g., "09/04/2026 18:00 WIB" is stored as 2026-04-09T18:00:00Z — treating
+    // WIB time as UTC). Therefore we use UTC midnight boundaries to stay consistent
+    // with how dates are actually stored in the DB.
     if (lastTrxFrom || lastTrxTo) {
       const andConditions: Record<string, unknown>[] = [];
       if (lastTrxFrom) {
-        // Midnight WIB = UTC+7, e.g. "2026-03-06T00:00:00+07:00" = "2026-03-05T17:00:00Z"
-        const from = new Date(lastTrxFrom + "T00:00:00+07:00");
+        // Start of day UTC (e.g. "2026-04-09" → 2026-04-09T00:00:00Z)
+        const from = new Date(lastTrxFrom + "T00:00:00Z");
         andConditions.push({
           transactions: { some: { status: "success", purchaseDate: { gte: from } } },
         });
       }
       if (lastTrxTo) {
-        // End of day WIB, use start of NEXT day (exclusive) to avoid second-precision edge cases
-        const nextDay = new Date(lastTrxTo + "T00:00:00+07:00");
-        nextDay.setDate(nextDay.getDate() + 1);
+        // Start of NEXT day UTC (exclusive upper bound — avoids second-precision issues)
+        const nextDay = new Date(lastTrxTo + "T00:00:00Z");
+        nextDay.setUTCDate(nextDay.getUTCDate() + 1);
         andConditions.push({
           transactions: { none: { status: "success", purchaseDate: { gte: nextDay } } },
         });
@@ -98,6 +102,7 @@ export async function GET(req: NextRequest) {
         where.AND = andConditions;
       }
     }
+
 
     // ── Order by ─────────────────────────────────────────────────────────────
     let orderBy: Record<string, unknown> | Record<string, unknown>[] = { createdAt: "desc" };
