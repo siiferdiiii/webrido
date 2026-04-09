@@ -21,6 +21,7 @@ import {
   Shield,
   Trash2,
   AlertTriangle,
+  ChevronDown,
 } from "lucide-react";
 
 interface StockTransaction {
@@ -254,7 +255,18 @@ function UserCheckModal({ account, onClose }: { account: StockItem; onClose: () 
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 export default function StockPage() {
-  const [data, setData] = useState<StockResponse | null>(null);
+  // State data
+  const [accounts, setAccounts] = useState<StockItem[]>([]);
+  const [total, setTotal] = useState(0);
+  const [statusCounts, setStatusCounts] = useState<Record<string, number>>({ available: 0, in_use: 0, sold: 0 });
+  const [remainingSlotsMobile, setRemainingSlotsMobile] = useState(0);
+  const [remainingSlotsDesktop, setRemainingsSlotsDesktop] = useState(0);
+
+  // Load More
+  const [page, setPage] = useState(1);
+  const limit = 50;
+  const [hasMore, setHasMore] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("Semua");
@@ -290,26 +302,59 @@ export default function StockPage() {
         return;
       }
       setDeleteConfirm(null);
-      fetchData();
+      fetchData(1, false);
     } catch {
       setDeleteError("Terjadi kesalahan jaringan");
     }
     setDeleting(false);
   }
 
-  const fetchData = useCallback(() => {
-    setLoading(true);
+  const fetchData = useCallback((pageNum: number, append: boolean) => {
+    if (append) setLoadingMore(true);
+    else setLoading(true);
+
     const params = new URLSearchParams();
     if (search) params.set("search", search);
     if (statusFilter !== "Semua") params.set("status", statusFilter);
+    params.set("page", String(pageNum));
+    params.set("limit", String(limit));
+
     fetch(`/api/stock?${params}`)
       .then((res) => res.json())
-      .then((json) => setData(json))
+      .then((json) => {
+        const newAccounts: StockItem[] = json.accounts || [];
+        if (append) {
+          setAccounts(prev => [...prev, ...newAccounts]);
+        } else {
+          setAccounts(newAccounts);
+        }
+        setTotal(json.total || 0);
+        setHasMore(newAccounts.length >= limit);
+        // Stats always use latest
+        const sc: Record<string, number> = { available: 0, in_use: 0, sold: 0 };
+        (json.statusCounts ? Object.entries(json.statusCounts) : []).forEach(([k, v]) => { sc[k] = v as number; });
+        setStatusCounts(sc);
+        setRemainingSlotsMobile(json.remainingSlotsMobile ?? 0);
+        setRemainingsSlotsDesktop(json.remainingSlotsDesktop ?? 0);
+      })
       .catch((err) => console.error(err))
-      .finally(() => setLoading(false));
+      .finally(() => {
+        if (append) setLoadingMore(false);
+        else setLoading(false);
+      });
   }, [search, statusFilter]);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  useEffect(() => {
+    setPage(1);
+    setHasMore(true);
+    fetchData(1, false);
+  }, [fetchData]);
+
+  function handleLoadMore() {
+    const next = page + 1;
+    setPage(next);
+    fetchData(next, true);
+  }
 
   async function handleAddSingle() {
     if (!singleForm.email || !singleForm.password) return;
@@ -328,7 +373,7 @@ export default function StockPage() {
     setSubmitting(false);
     setShowSingleModal(false);
     setSingleForm({ email: "", password: "", duration: 30, productType: "mobile", maxSlots: 3 });
-    fetchData();
+    fetchData(1, false);
   }
 
   async function handleBulkImport() {
@@ -347,7 +392,7 @@ export default function StockPage() {
     setSubmitting(false);
     setShowBulkModal(false);
     setBulkText("");
-    fetchData();
+    fetchData(1, false);
   }
 
   function copyPassword(id: string, password: string) {
@@ -364,11 +409,6 @@ export default function StockPage() {
     setBulkMaxSlots(type === "desktop" ? 2 : 3);
   }
 
-  const accounts = data?.accounts || [];
-  const sc = data?.statusCounts || { available: 0, in_use: 0, sold: 0 };
-  const remainingSlotsMobile = data?.remainingSlotsMobile ?? 0;
-  const remainingSlotsDesktop = data?.remainingSlotsDesktop ?? 0;
-
   return (
     <>
       <Topbar title="Stok Akun" subtitle="Kelola stok akun CapCut Pro (Sharing Account)" />
@@ -378,17 +418,17 @@ export default function StockPage() {
         <div className="glass-card p-4 flex items-center gap-3 flex-wrap md:hidden">
           <div className="flex items-center gap-2 flex-1 min-w-[100px]">
             <span className="text-xs text-[var(--text-muted)]">Tersedia:</span>
-            <span className="text-base font-bold text-emerald-400">{sc.available || 0}</span>
+            <span className="text-base font-bold text-emerald-400">{statusCounts.available || 0}</span>
           </div>
           <div className="w-px h-4 bg-[var(--border-color)]" />
           <div className="flex items-center gap-2 flex-1 min-w-[100px]">
             <span className="text-xs text-[var(--text-muted)]">Digunakan:</span>
-            <span className="text-base font-bold text-cyan-400">{sc.in_use || 0}</span>
+            <span className="text-base font-bold text-cyan-400">{statusCounts.in_use || 0}</span>
           </div>
           <div className="w-px h-4 bg-[var(--border-color)]" />
           <div className="flex items-center gap-2 flex-1 min-w-[100px]">
             <span className="text-xs text-[var(--text-muted)]">Sold:</span>
-            <span className="text-base font-bold text-slate-400">{sc.sold || 0}</span>
+            <span className="text-base font-bold text-slate-400">{statusCounts.sold || 0}</span>
           </div>
           <div className="w-full h-px bg-[var(--border-color)]" />
           <div className="flex items-center gap-2 flex-1 min-w-[100px]">
@@ -407,15 +447,15 @@ export default function StockPage() {
         {/* Desktop 5-col grid */}
         <div className="hidden md:grid grid-cols-5 gap-3 max-w-4xl">
           <div className="glass-card p-4 text-center">
-            <p className="text-2xl font-bold text-emerald-400">{sc.available || 0}</p>
+            <p className="text-2xl font-bold text-emerald-400">{statusCounts.available || 0}</p>
             <p className="text-xs text-[var(--text-muted)] mt-1">Tersedia</p>
           </div>
           <div className="glass-card p-4 text-center">
-            <p className="text-2xl font-bold text-cyan-400">{sc.in_use || 0}</p>
+            <p className="text-2xl font-bold text-cyan-400">{statusCounts.in_use || 0}</p>
             <p className="text-xs text-[var(--text-muted)] mt-1">Digunakan</p>
           </div>
           <div className="glass-card p-4 text-center">
-            <p className="text-2xl font-bold text-slate-400">{sc.sold || 0}</p>
+            <p className="text-2xl font-bold text-slate-400">{statusCounts.sold || 0}</p>
             <p className="text-xs text-[var(--text-muted)] mt-1">Sold</p>
           </div>
           <div className="glass-card p-4 text-center border border-green-500/20">
@@ -461,7 +501,7 @@ export default function StockPage() {
 
         {/* View Toggle mobile */}
         <div className="flex items-center justify-between lg:hidden">
-          <p className="text-xs text-[var(--text-muted)]">Total {data?.total || 0} akun</p>
+          <p className="text-xs text-[var(--text-muted)]">Total {total} akun</p>
           <div className="flex gap-1">
             <button className={`view-toggle-btn ${viewMode === 'table' ? 'active' : ''}`} onClick={() => setViewMode('table')}><LayoutList size={13} /> Tabel</button>
             <button className={`view-toggle-btn ${viewMode === 'card' ? 'active' : ''}`} onClick={() => setViewMode('card')}><LayoutGrid size={13} /> Card</button>
@@ -618,8 +658,29 @@ export default function StockPage() {
                   })}
                 </div>
               )}
-              <div className="px-4 md:px-6 py-4 border-t border-[rgba(99,102,241,0.08)]">
-                <p className="text-sm text-[var(--text-muted)]">Total {data?.total || 0} akun</p>
+              {/* ── Load More Footer ── */}
+              <div className="flex flex-col sm:flex-row items-center justify-between px-4 md:px-6 py-4 border-t border-[rgba(99,102,241,0.08)] gap-3">
+                <p className="text-sm text-[var(--text-muted)]">Menampilkan <span className="font-semibold text-white">{accounts.length}</span> dari <span className="font-semibold text-white">{total}</span> akun</p>
+                {hasMore && !loading ? (
+                  <button
+                    onClick={handleLoadMore}
+                    disabled={loadingMore}
+                    className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all"
+                    style={{
+                      background: "rgba(99,102,241,0.1)",
+                      border: "1px solid rgba(99,102,241,0.25)",
+                      color: "#818cf8",
+                      cursor: loadingMore ? "wait" : "pointer",
+                    }}
+                  >
+                    {loadingMore ? <Loader2 size={14} className="animate-spin" /> : <ChevronDown size={14} />}
+                    {loadingMore ? "Memuat..." : `Tampilkan ${Math.min(limit, total - accounts.length)} akun berikutnya`}
+                  </button>
+                ) : !loading && accounts.length > 0 ? (
+                  <span className="text-xs text-[var(--text-muted)] flex items-center gap-1.5">
+                    <Check size={12} className="text-emerald-400" /> Semua data sudah ditampilkan
+                  </span>
+                ) : null}
               </div>
             </>
           )}

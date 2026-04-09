@@ -139,7 +139,7 @@ export default function UsersPage() {
 
   // Pagination
   const [page, setPage] = useState(1);
-  const limit = 60;
+  const limit = 50;
 
   // Modal State
   const [showModal, setShowModal] = useState(false);
@@ -155,6 +155,10 @@ export default function UsersPage() {
 
   // Customer active days (dari settings, default 60)
   const [activeDays, setActiveDays] = useState(60);
+
+  // Load More state
+  const [hasMore, setHasMore] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
 
   const formatCurrency = (amount: number) =>
     new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", minimumFractionDigits: 0 }).format(amount);
@@ -194,33 +198,53 @@ export default function UsersPage() {
     if (activeFilters.minTrx) params.set("minTrx", activeFilters.minTrx);
     if (activeFilters.maxTrx) params.set("maxTrx", activeFilters.maxTrx);
     params.set("sortBy", sortBy);
-    params.set("page", String(page));
+    return params; // page & limit diambil dari arg fetchData
+  }, [search, activeFilters, sortBy]);
+
+  const fetchData = useCallback((pageNum: number, append: boolean) => {
+    if (append) setLoadingMore(true);
+    else {
+      setLoading(true);
+      setSelectedIds(new Set());
+      setSelectAllDB(false);
+    }
+
+    const params = buildFilterParams();
+    params.set("page", String(pageNum));
     params.set("limit", String(limit));
-    return params;
-  }, [search, activeFilters, sortBy, page, limit]);
 
-  const fetchData = useCallback(() => {
-    setLoading(true);
-    setSelectedIds(new Set());
-    setSelectAllDB(false);
-
-    fetch(`/api/users?${buildFilterParams()}`)
+    fetch(`/api/users?${params}`)
       .then((res) => res.json())
       .then((json) => {
-        setUsers(json.users || []);
+        const newUsers: UserItem[] = json.users || [];
+        if (append) {
+          setUsers(prev => [...prev, ...newUsers]);
+        } else {
+          setUsers(newUsers);
+        }
         setTotal(json.total || 0);
-        if (json.activeDays) setActiveDays(json.activeDays); // sync dari settings
+        if (json.activeDays) setActiveDays(json.activeDays);
+        setHasMore(newUsers.length >= limit);
       })
       .catch(console.error)
-      .finally(() => setLoading(false));
+      .finally(() => {
+        if (append) setLoadingMore(false);
+        else setLoading(false);
+      });
   }, [buildFilterParams]);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  // Fresh load saat filter berubah
+  useEffect(() => {
+    setPage(1);
+    setHasMore(true);
+    fetchData(1, false);
+  }, [fetchData]);
 
-  // Reset ke page 1 saat filter/search berubah
-  useEffect(() => { setPage(1); }, [search, activeFilters, sortBy]);
-
-  const totalPages = Math.ceil(total / limit);
+  function handleLoadMore() {
+    const next = page + 1;
+    setPage(next);
+    fetchData(next, true);
+  }
 
   // Close popover on outside click or scroll
   useEffect(() => {
@@ -270,7 +294,7 @@ export default function UsersPage() {
       setActiveFilters(f => ({ ...f, tagIds: f.tagIds.filter(id => id !== deleteTagConfirm.id) }));
       setDeleteTagConfirm(null);
       fetchTags();
-      fetchData();
+      fetchData(1, false);
     } finally {
       setDeletingTag(false);
     }
@@ -294,7 +318,7 @@ export default function UsersPage() {
           body: JSON.stringify({ tagId }),
         });
       }
-      fetchData();
+      fetchData(1, false);
     } finally {
       setTogglingTag(null);
     }
@@ -406,7 +430,7 @@ export default function UsersPage() {
       }
       await Promise.all(promises);
       setPendingTagChanges(new Map());
-      fetchData();
+      fetchData(1, false);
     } finally {
       setSavingAllTags(false);
     }
@@ -808,69 +832,33 @@ export default function UsersPage() {
                 </div>
               )}
 
-              {/* ── Footer Pagination ── */}
-              <div className="flex items-center justify-between px-4 md:px-6 py-4 border-t border-[rgba(99,102,241,0.08)] flex-wrap gap-3">
+              {/* ── Load More Footer ── */}
+              <div className="flex flex-col sm:flex-row items-center justify-between px-4 md:px-6 py-4 border-t border-[rgba(99,102,241,0.08)] gap-3">
                 <p className="text-sm text-[var(--text-muted)]">
-                  Menampilkan {users.length} dari <span className="font-semibold text-white">{total}</span> pelanggan
-                  {totalPages > 1 && <span className="ml-1">(Hal. {page}/{totalPages})</span>}
+                  Menampilkan{" "}
+                  <span className="font-semibold text-white">{users.length}</span> dari{" "}
+                  <span className="font-semibold text-white">{total}</span> pelanggan
                 </p>
-                {totalPages > 1 && (
-                  <div className="flex items-center gap-1">
-                    <button
-                      onClick={() => setPage(1)}
-                      disabled={page === 1}
-                      className="btn-icon"
-                      style={{ width: 30, height: 30, opacity: page === 1 ? 0.35 : 1 }}
-                      title="Halaman pertama"
-                    >
-                      <ChevronLeft size={12} />  <ChevronLeft size={12} style={{marginLeft:-6}} />
-                    </button>
-                    <button
-                      onClick={() => setPage(p => Math.max(1, p - 1))}
-                      disabled={page === 1}
-                      className="btn-icon"
-                      style={{ width: 32, height: 32, opacity: page === 1 ? 0.35 : 1 }}
-                    >
-                      <ChevronLeft size={14} />
-                    </button>
-                    {/* Page number pills */}
-                    {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                      // Windowed page numbers
-                      let start = Math.max(1, page - 2);
-                      if (start + 4 > totalPages) start = Math.max(1, totalPages - 4);
-                      return start + i;
-                    }).map(p => (
-                      <button
-                        key={p}
-                        onClick={() => setPage(p)}
-                        style={{
-                          minWidth: 32, height: 32, borderRadius: 8, fontSize: 12, fontWeight: p === page ? 700 : 400,
-                          background: p === page ? 'rgba(99,102,241,0.25)' : 'transparent',
-                          border: `1px solid ${p === page ? 'rgba(99,102,241,0.5)' : 'rgba(255,255,255,0.07)'}`,
-                          color: p === page ? '#818cf8' : 'var(--text-muted)',
-                          cursor: 'pointer', transition: 'all 0.15s',
-                        }}
-                      >{p}</button>
-                    ))}
-                    <button
-                      onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-                      disabled={page === totalPages}
-                      className="btn-icon"
-                      style={{ width: 32, height: 32, opacity: page === totalPages ? 0.35 : 1 }}
-                    >
-                      <ChevronRight size={14} />
-                    </button>
-                    <button
-                      onClick={() => setPage(totalPages)}
-                      disabled={page === totalPages}
-                      className="btn-icon"
-                      style={{ width: 30, height: 30, opacity: page === totalPages ? 0.35 : 1 }}
-                      title="Halaman terakhir"
-                    >
-                      <ChevronRight size={12} /><ChevronRight size={12} style={{marginLeft:-6}} />
-                    </button>
-                  </div>
-                )}
+                {hasMore && !loading ? (
+                  <button
+                    onClick={handleLoadMore}
+                    disabled={loadingMore}
+                    className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all"
+                    style={{
+                      background: "rgba(99,102,241,0.1)",
+                      border: "1px solid rgba(99,102,241,0.25)",
+                      color: "#818cf8",
+                      cursor: loadingMore ? "wait" : "pointer",
+                    }}
+                  >
+                    {loadingMore ? <Loader2 size={14} className="animate-spin" /> : <ChevronDown size={14} />}
+                    {loadingMore ? "Memuat..." : `Tampilkan ${Math.min(limit, total - users.length)} pelanggan berikutnya`}
+                  </button>
+                ) : !loading && users.length > 0 ? (
+                  <span className="text-xs text-[var(--text-muted)] flex items-center gap-1.5">
+                    <Check size={12} className="text-emerald-400" /> Semua data sudah ditampilkan
+                  </span>
+                ) : null}
               </div>
             </>
           )}

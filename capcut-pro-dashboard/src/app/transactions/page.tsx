@@ -25,6 +25,7 @@ import {
   Files,
   Smartphone,
   Monitor,
+  ChevronDown,
 } from "lucide-react";
 
 interface Transaction {
@@ -98,7 +99,9 @@ export default function TransactionsPage() {
 
   // Pagination
   const [page, setPage] = useState(1);
-  const limit = 20;
+  const limit = 50;
+  const [hasMore, setHasMore] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'table' | 'card'>('table');
 
@@ -134,30 +137,50 @@ export default function TransactionsPage() {
   const [importProgress, setImportProgress] = useState<ImportProgress | null>(null);
   const [importDone, setImportDone] = useState(false);
 
-  const fetchData = useCallback(() => {
-    setLoading(true);
+  const fetchData = useCallback((pageNum: number, append: boolean) => {
+    if (append) setLoadingMore(true);
+    else setLoading(true);
+
     const params = new URLSearchParams();
     if (search) params.set("search", search);
     if (statusFilter !== "Semua") params.set("status", statusFilter);
     if (sourceFilter !== "Semua") params.set("source", sourceFilter);
     if (startDate) params.set("startDate", startDate);
     if (endDate) params.set("endDate", endDate);
-    params.set("page", String(page));
+    params.set("page", String(pageNum));
     params.set("limit", String(limit));
 
     fetch(`/api/transactions?${params}`)
       .then((res) => res.json())
-      .then((json) => { setTransactions(json.transactions || []); setTotal(json.total || 0); })
+      .then((json) => {
+        const newItems: Transaction[] = json.transactions || [];
+        if (append) {
+          setTransactions(prev => [...prev, ...newItems]);
+        } else {
+          setTransactions(newItems);
+        }
+        setTotal(json.total || 0);
+        setHasMore(newItems.length >= limit);
+      })
       .catch(console.error)
-      .finally(() => setLoading(false));
-  }, [search, statusFilter, sourceFilter, startDate, endDate, page]);
+      .finally(() => {
+        if (append) setLoadingMore(false);
+        else setLoading(false);
+      });
+  }, [search, statusFilter, sourceFilter, startDate, endDate]);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  // Fresh load saat filter berubah
+  useEffect(() => {
+    setPage(1);
+    setHasMore(true);
+    fetchData(1, false);
+  }, [fetchData]);
 
-  // Reset page to 1 when filters/search change
-  useEffect(() => { setPage(1); }, [search, statusFilter, sourceFilter, startDate, endDate]);
-
-  const totalPages = Math.ceil(total / limit);
+  function handleLoadMore() {
+    const next = page + 1;
+    setPage(next);
+    fetchData(next, true);
+  }
 
 
   async function handleAddManual() {
@@ -585,25 +608,33 @@ export default function TransactionsPage() {
                 </div>
               )}
 
-              {/* ── Pagination ── */}
-              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between px-4 md:px-6 py-4 border-t border-[rgba(99,102,241,0.08)] gap-3">
-                <p className="text-sm text-[var(--text-muted)]">Total {total} transaksi &bull; Hal. {page}/{totalPages}</p>
-                <div className="flex items-center gap-2">
-                  <button className="btn-secondary text-xs px-3 py-1.5 disabled:opacity-40 disabled:cursor-not-allowed" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page <= 1 || loading}>← Prev</button>
-                  <div className="flex items-center gap-1">
-                    {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                      let pageNum: number;
-                      if (totalPages <= 5) pageNum = i + 1;
-                      else if (page <= 3) pageNum = i + 1;
-                      else if (page >= totalPages - 2) pageNum = totalPages - 4 + i;
-                      else pageNum = page - 2 + i;
-                      return (
-                        <button key={pageNum} onClick={() => setPage(pageNum)} className={`w-7 h-7 rounded-lg text-xs font-medium ${pageNum === page ? 'bg-[rgba(99,102,241,0.3)] text-white border border-[rgba(99,102,241,0.5)]' : 'text-[var(--text-muted)] hover:bg-[rgba(99,102,241,0.1)] hover:text-white'}`}>{pageNum}</button>
-                      );
-                    })}
-                  </div>
-                  <button className="btn-secondary text-xs px-3 py-1.5 disabled:opacity-40 disabled:cursor-not-allowed" onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page >= totalPages || loading}>Next →</button>
-                </div>
+              {/* ── Load More Footer ── */}
+              <div className="flex flex-col sm:flex-row items-center justify-between px-4 md:px-6 py-4 border-t border-[rgba(99,102,241,0.08)] gap-3">
+                <p className="text-sm text-[var(--text-muted)]">
+                  Menampilkan{" "}
+                  <span className="font-semibold text-white">{transactions.length}</span> dari{" "}
+                  <span className="font-semibold text-white">{total}</span> transaksi
+                </p>
+                {hasMore && !loading ? (
+                  <button
+                    onClick={handleLoadMore}
+                    disabled={loadingMore}
+                    className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all"
+                    style={{
+                      background: "rgba(99,102,241,0.1)",
+                      border: "1px solid rgba(99,102,241,0.25)",
+                      color: "#818cf8",
+                      cursor: loadingMore ? "wait" : "pointer",
+                    }}
+                  >
+                    {loadingMore ? <Loader2 size={14} className="animate-spin" /> : <ChevronDown size={14} />}
+                    {loadingMore ? "Memuat..." : `Tampilkan ${Math.min(limit, total - transactions.length)} data berikutnya`}
+                  </button>
+                ) : !loading && transactions.length > 0 ? (
+                  <span className="text-xs text-[var(--text-muted)] flex items-center gap-1.5">
+                    <CheckCircle size={12} className="text-emerald-400" /> Semua data sudah ditampilkan
+                  </span>
+                ) : null}
               </div>
             </>
           )}
