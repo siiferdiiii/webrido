@@ -1,19 +1,19 @@
 import { prisma } from "@/lib/db";
 import { NextRequest, NextResponse } from "next/server";
 import { parseDuration, calcWarrantyExpiry } from "@/lib/duration";
+import { parseProductType } from "@/lib/product";
 
-// Deteksi tipe produk dari judul Lynk.id
-function parseProductType(title: string): "mobile" | "desktop" {
-  const lower = title.toLowerCase();
-  if (lower.includes("laptop") || lower.includes("mac") || lower.includes("desktop") || lower.includes("pc")) {
-    return "desktop";
-  }
-  return "mobile"; // HP/iPad/Tablet = default
-}
+// FIX #6: Gunakan shared parseProductType dari lib/product.ts (hapus definisi lokal)
 
 // POST /api/webhook/lynkid - Menerima webhook dari n8n (Lynk.id payment)
 export async function POST(req: NextRequest) {
   try {
+    // FIX #9: Validasi webhook secret (opsional, aktif jika env var di-set)
+    const webhookSecret = req.headers.get("x-webhook-secret");
+    if (process.env.LYNKID_WEBHOOK_SECRET && webhookSecret !== process.env.LYNKID_WEBHOOK_SECRET) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const payload = await req.json();
     const data = Array.isArray(payload) ? payload[0] : payload;
     const body = data?.body || data;
@@ -115,44 +115,82 @@ export async function POST(req: NextRequest) {
     }
 
     // ===== 3. SHARING ACCOUNT: Cari stok yang masih ada slot kosong =====
-    // Round-robin: prioritaskan akun dengan usedSlots paling sedikit (distribusi merata)
-    // Contoh: 3 akun → order1→Akun1-Slot1, order2→Akun2-Slot1, order3→Akun3-Slot1, order4→Akun1-Slot2, dst.
+    // FIX #5: Ubah dari "available" saja ke "available + in_use" agar akun yang sudah
+    // punya 1 pengguna bisa menerima pengguna baru (jika masih ada slot kosong)
     const maxSlotsForType = productType === "desktop" ? 2 : 3;
 
-    let account = await prisma.stockAccount.findFirst({
-      where: {
-        productType: productType,
-        status: "available",
-        usedSlots: { lt: maxSlotsForType },
-        durationDays: durationDays,
-      },
-      orderBy: [
-        { usedSlots: "asc" }, // Round-robin: isi akun dengan slot paling sedikit dulu
-        { createdAt: "asc" },
-      ],
-    });
-
-    // Fallback: cari stok tipe yang sama tanpa filter durasi
-    if (!account) {
-      account = await prisma.stockAccount.findFirst({
+    // FIX #1: Gunakan $transaction untuk atomic slot assignment
+    const txResult = await prisma.$transaction(async (tx) => {
+      // Cari kandidat akun yang matching durasi + tipe
+      let candidateAccounts = await tx.stockAccount.findMany({
         where: {
-          productType: productType,
-          status: "available",
-          usedSlots: { lt: maxSlotsForType },
+          productType,
+          status: { in: ["available", "in_use"] }, // FIX #5: sertakan in_use
+          durationDays,
         },
         orderBy: [{ usedSlots: "asc" }, { createdAt: "asc" }],
       });
-    }
 
-    // Fallback terakhir: tipe apapun
-    if (!account) {
-      account = await prisma.stockAccount.findFirst({
-        where: { status: "available" },
-        orderBy: { createdAt: "asc" },
+      // Fallback 1: tipe sama, tanpa filter durasi
+      if (candidateAccounts.length === 0) {
+        candidateAccounts = await tx.stockAccount.findMany({
+          where: { productType, status: { in: ["available", "in_use"] } },
+          orderBy: [{ usedSlots: "asc" }, { createdAt: "asc" }],
+        });
+      }
+
+      // Fallback 2: tipe apapun
+      if (candidateAccounts.length === 0) {
+        candidateAccounts = await tx.stockAccount.findMany({
+          where: { status: { in: ["available", "in_use"] } },
+          orderBy: [{ usedSlots: "asc" }, { createdAt: "asc" }],
+        });
+      }
+
+      // Pilih akun yang masih ada sisa slot
+      const account = candidateAccounts.find(acc =>
+        (acc.usedSlots ?? 0) < (acc.maxSlots ?? maxSlotsForType)
+      ) ?? null;
+
+      if (!account) return null;
+
+      // ===== 4. Buat transaksi =====
+      const purchaseDate = messageData.createdAt ? new Date(messageData.createdAt) : new Date();
+      const warrantyExpiredAt = calcWarrantyExpiry(purchaseDate, durationDays);
+
+      const transaction = await tx.transaction.create({
+        data: {
+          lynkIdRef: refId || null,
+          userId: user.id,
+          stockAccountId: account.id,
+          amount: price,
+          productName: productTitle,
+          status: "success",
+          isManual: false,
+          purchaseDate,
+          warrantyExpiredAt,
+        },
       });
-    }
 
-    if (!account) {
+      // ===== 5. FIX #1: Atomic update slot =====
+      const newUsedSlots = (account.usedSlots ?? 0) + 1;
+      const accountMaxSlots = account.maxSlots ?? maxSlotsForType;
+      const updated = await tx.stockAccount.updateMany({
+        where: {
+          id: account.id,
+          usedSlots: { lt: accountMaxSlots }, // Atomic guard
+        },
+        data: {
+          usedSlots: newUsedSlots,
+          status: newUsedSlots >= accountMaxSlots ? "full" : "in_use", // FIX: "in_use" bukan "available"
+        },
+      });
+      if (updated.count === 0) throw new Error("SLOT_PENUH"); // Rollback jika race condition
+
+      return { account, transaction, purchaseDate, warrantyExpiredAt, newUsedSlots, accountMaxSlots };
+    });
+
+    if (!txResult) {
       await prisma.messageLog.create({
         data: {
           userId: user.id,
@@ -169,34 +207,8 @@ export async function POST(req: NextRequest) {
       }, { status: 200 });
     }
 
-    // ===== 4. Buat transaksi =====
-    const purchaseDate = messageData.createdAt ? new Date(messageData.createdAt) : new Date();
-    const warrantyExpiredAt = calcWarrantyExpiry(purchaseDate, durationDays);
-
-    const transaction = await prisma.transaction.create({
-      data: {
-        lynkIdRef: refId || null,
-        userId: user.id,
-        stockAccountId: account.id,
-        amount: price,
-        productName: productTitle,
-        status: "success",
-        isManual: false,
-        purchaseDate,
-        warrantyExpiredAt,
-      },
-    });
-
-    // ===== 5. Update slot stok =====
-    const newUsedSlots = (account.usedSlots || 0) + 1;
-    const accountMaxSlots = account.maxSlots || maxSlotsForType;
-    await prisma.stockAccount.update({
-      where: { id: account.id },
-      data: {
-        usedSlots: newUsedSlots,
-        status: newUsedSlots >= accountMaxSlots ? "full" : "available",
-      },
-    });
+    // Destructure hasil dari $transaction
+    const { account, transaction, newUsedSlots, accountMaxSlots } = txResult;
 
     // ===== 6. AFFILIATE KOMISI =====
     // Komisi diberikan jika: user punya referredBy affiliate (baik order pertama maupun repeat)
@@ -264,7 +276,7 @@ export async function POST(req: NextRequest) {
         productType,
         duration: durationDays,
         slot: `${newUsedSlots}/${accountMaxSlots}`,
-        warrantyExpiredAt: warrantyExpiredAt.toISOString(),
+        warrantyExpiredAt: txResult.warrantyExpiredAt.toISOString(),
       },
       affiliate: commissionInfo,
       questions,

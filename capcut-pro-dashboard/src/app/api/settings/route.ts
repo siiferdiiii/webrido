@@ -7,9 +7,9 @@ const DEFAULTS: Record<string, string> = {
   customer_active_days: "60",
   template_followup: `Halo {{nama}} 👋
 
-Kami dari tim CapCut Pro ingin mengingatkan kamu bahwa masa berlangganan kamu akan segera habis.
+Kami dari tim Dorizz Store ingin mengingatkan kamu bahwa masa berlangganan kamu akan segera habis.
 
-Jangan sampai ketinggalan update terbaru! Yuk, perpanjang sekarang dan nikmati fitur premium CapCut tanpa batas 🎬✨
+Jangan sampai ketinggalan update terbaru! Yuk, perpanjang sekarang dan nikmati fitur premium tanpa batas 🎬✨
 
 Balas pesan ini atau hubungi kami untuk info lebih lanjut ya!
 
@@ -17,7 +17,7 @@ Terima kasih sudah bersama kami 🙏`,
 
   template_send_account: `Halo {{nama}} 👋
 
-Terima kasih sudah berlangganan CapCut Pro! Berikut adalah data akun kamu:
+Terima kasih sudah berlangganan di Dorizz Store! Berikut adalah data akun kamu:
 
 📧 Email  : {{akun_email}}
 🔑 Password: {{akun_password}}
@@ -41,9 +41,9 @@ Mohon maaf atas ketidaknyamanannya. Jika masih ada kendala, jangan ragu untuk me
 
   template_promo: `Halo {{nama}} 👋
 
-Ada promo spesial untuk kamu hari ini! 🎉
+Ada promo spesial dari Dorizz Store untuk kamu hari ini! 🎉
 
-Dapatkan CapCut Pro dengan harga terbaik dan nikmati semua fitur premium tanpa batas.
+Dapatkan akun premium dengan harga terbaik dan nikmati semua fitur tanpa batas.
 
 Jangan lewatkan kesempatan ini! Hubungi kami sekarang untuk info lebih lanjut 🔥`,
 };

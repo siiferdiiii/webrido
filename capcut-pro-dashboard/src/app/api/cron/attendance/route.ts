@@ -20,6 +20,17 @@ function getWIBDate(): string {
   return new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Jakarta" });
 }
 
+// FIX #11: Cek apakah waktu sekarang dalam window ±N menit dari target
+// Mencegah missed check-in/out jika n8n trigger terlambat beberapa menit
+function isWithinWindow(nowWIB: string, target: string, windowMinutes = 2): boolean {
+  const [nowH, nowM] = nowWIB.split(":").map(Number);
+  const [tarH, tarM] = target.split(":").map(Number);
+  if (isNaN(nowH) || isNaN(nowM) || isNaN(tarH) || isNaN(tarM)) return false;
+  const nowTotal = nowH * 60 + nowM;
+  const tarTotal = tarH * 60 + tarM;
+  return Math.abs(nowTotal - tarTotal) <= windowMinutes;
+}
+
 // POST /api/cron/attendance — called by n8n every minute
 // Header: x-cron-secret: [CRON_SECRET]
 export async function POST(req: NextRequest) {
@@ -48,8 +59,8 @@ export async function POST(req: NextRequest) {
     for (const sched of schedules) {
       if (sched.admin.status !== "active") continue;
 
-      // ── Check-in ──
-      if (nowWIB === sched.shiftStart) {
+      // FIX #11: Gunakan window ±2 menit agar tidak missed jika n8n terlambat trigger
+      if (isWithinWindow(nowWIB, sched.shiftStart)) {
         // Check if already sent today
         const existing = await prisma.attendanceRecord.findUnique({
           where: { adminId_date: { adminId: sched.adminId, date: todayWIB } },
@@ -121,8 +132,8 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      // ── Check-out ──
-      if (nowWIB === sched.shiftEnd) {
+      // FIX #11: Gunakan window ±2 menit
+      if (isWithinWindow(nowWIB, sched.shiftEnd)) {
         const existing = await prisma.attendanceRecord.findUnique({
           where: { adminId_date: { adminId: sched.adminId, date: todayWIB } },
         });

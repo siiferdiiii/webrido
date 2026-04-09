@@ -4,6 +4,12 @@ import { NextRequest, NextResponse } from "next/server";
 // POST /api/followups/callback - Menerima status update webhook dari n8n
 export async function POST(req: NextRequest) {
   try {
+    // FIX #9: Validasi secret dari n8n (opsional, aktif jika env var di-set)
+    const webhookSecret = req.headers.get("x-webhook-secret");
+    if (process.env.N8N_CALLBACK_SECRET && webhookSecret !== process.env.N8N_CALLBACK_SECRET) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const body = await req.json();
     const { recipientId, status } = body;
 

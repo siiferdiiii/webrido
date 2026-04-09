@@ -113,16 +113,17 @@ export function hasPermission(
 
 // ─── Auth Guards (for API routes) ────────────────────────────────────────────
 
-export async function requireAuth(): Promise<{ user: AuthPayload; error?: never } | { user?: never; error: NextResponse }> {
+export async function requireAuth(): Promise<{ user: AuthPayload; dbUser: { id: string; status: string; permissions: unknown }; error?: never } | { user?: never; dbUser?: never; error: NextResponse }> {
   const user = await getAuthUser();
   if (!user) {
     return { error: NextResponse.json({ error: "Unauthorized" }, { status: 401 }) };
   }
-  const dbUser = await prisma.adminUser.findUnique({ where: { id: user.id } });
+  // FIX #8: Sekaligus ambil dbUser — dikembalikan supaya requirePermission tidak perlu query ulang
+  const dbUser = await prisma.adminUser.findUnique({ where: { id: user.id }, select: { id: true, status: true, permissions: true } });
   if (!dbUser || dbUser.status !== "active") {
     return { error: NextResponse.json({ error: "Akun tidak aktif atau tidak ditemukan" }, { status: 401 }) };
   }
-  return { user };
+  return { user, dbUser };
 }
 
 export async function requireDeveloper(): Promise<{ user: AuthPayload; error?: never } | { user?: never; error: NextResponse }> {
@@ -137,11 +138,12 @@ export async function requireDeveloper(): Promise<{ user: AuthPayload; error?: n
 export async function requirePermission(key: PermissionKey): Promise<{ user: AuthPayload; error?: never } | { user?: never; error: NextResponse }> {
   const result = await requireAuth();
   if ("error" in result) return result;
-  const { user } = result;
+  const { user, dbUser } = result;
 
+  // FIX #8: Developer bypass — tidak perlu cek permissions
   if (user.role === "developer") return { user };
 
-  const dbUser = await prisma.adminUser.findUnique({ where: { id: user.id } });
+  // FIX #8: Pakai dbUser dari requireAuth — tidak perlu query DB lagi
   const perms = dbUser?.permissions as Record<string, boolean> | null;
   if (!perms || !perms[key]) {
     return { error: NextResponse.json({ error: "Akses ditolak: izin tidak mencukupi" }, { status: 403 }) };

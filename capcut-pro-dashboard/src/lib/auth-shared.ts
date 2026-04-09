@@ -11,6 +11,7 @@ export const ALL_PERMISSIONS = {
   page_messages: "Riwayat Pesan",
   page_settings: "Halaman Settings",
   page_absensi: "Halaman Absensi",
+  page_warranty: "Halaman Klaim Garansi",  // FIX #10: tambah permission untuk warranty
   export_data: "Export CSV",
   import_data: "Import CSV/Excel",
   delete_data: "Hapus Data",
@@ -28,6 +29,7 @@ export const DEFAULT_ADMIN_PERMISSIONS: Record<PermissionKey, boolean> = {
   page_messages: true,
   page_settings: false,
   page_absensi: true,
+  page_warranty: true,  // default: admin bisa akses halaman garansi
   export_data: true,
   import_data: false,
   delete_data: false,

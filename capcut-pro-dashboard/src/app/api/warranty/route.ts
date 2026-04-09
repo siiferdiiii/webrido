@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/db";
 import { NextRequest, NextResponse } from "next/server";
+import { requirePermission } from "@/lib/auth";
 
 const WARRANTY_WEBHOOK_URL =
   "https://appsheetindonesia-dorrizstore.qxifii.easypanel.host/webhook/25ef64ae-a473-4f33-9549-d4a86138d14e";
@@ -27,6 +28,8 @@ async function sendWarrantyWebhook(payload: {
 
 // GET /api/warranty - Ambil semua klaim garansi
 export async function GET(req: NextRequest) {
+  const auth = await requirePermission("page_warranty");
+  if ("error" in auth) return auth.error;
   try {
     const { searchParams } = new URL(req.url);
     const search = searchParams.get("search") || "";
@@ -70,6 +73,8 @@ export async function GET(req: NextRequest) {
 
 // POST /api/warranty - Proses klaim garansi baru
 export async function POST(req: NextRequest) {
+  const auth = await requirePermission("page_warranty");
+  if ("error" in auth) return auth.error;
   try {
     const body = await req.json();
     const { transactionId, claimReason } = body;
@@ -91,15 +96,27 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Transaksi tidak ditemukan" }, { status: 404 });
     }
 
+    // FIX #2: Cek duplikat klaim — satu transaksi hanya bisa diklaim sekali
+    const existingClaim = await prisma.warrantyClaim.findFirst({
+      where: { transactionId, status: "resolved" },
+    });
+    if (existingClaim) {
+      return NextResponse.json(
+        { error: "Transaksi ini sudah pernah diklaim garansi. ID klaim: " + existingClaim.id.substring(0, 8) },
+        { status: 400 }
+      );
+    }
+
     // 2. Tentukan productType dari akun lama agar akun pengganti sesuai tipe produk
     const oldProductType = transaction.stockAccount?.productType ?? "mobile";
     const defaultMaxSlots = oldProductType === "desktop" ? 2 : 3;
 
     // Cari akun baru yang tersedia dengan productType yang SAMA
     // PENTING: exclude akun lama agar tidak reassign akun yang sama!
+    // FIX #3: Tambah "full" ke status — akun full bisa jadi penerima setelah slot dikurangi
     const candidateAccounts = await prisma.stockAccount.findMany({
       where: {
-        status: { in: ["available", "in_use"] },
+        status: { in: ["available", "in_use", "full"] },
         productType: oldProductType,
         ...(transaction.stockAccountId ? { id: { not: transaction.stockAccountId } } : {}),
       },
@@ -151,13 +168,14 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // Set akun baru ke in_use dan increment slot
+    // Set akun baru ke in_use/full dan increment slot
+    // FIX #3: Fix ternary yang selalu "in_use" — seharusnya "full" jika slot penuh
     const newUsedSlots = (newAccount.usedSlots ?? 0) + 1;
     const newMaxSlots = newAccount.maxSlots ?? defaultMaxSlots;
     await prisma.stockAccount.update({
       where: { id: newAccount.id },
       data: {
-        status: newUsedSlots >= newMaxSlots ? "in_use" : "in_use",
+        status: newUsedSlots >= newMaxSlots ? "full" : "in_use",
         usedSlots: { increment: 1 },
       },
     });

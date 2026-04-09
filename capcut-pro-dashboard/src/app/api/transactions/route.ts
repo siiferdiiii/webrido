@@ -2,6 +2,7 @@ import { prisma } from "@/lib/db";
 import { NextRequest, NextResponse } from "next/server";
 import { requirePermission } from "@/lib/auth";
 import { parseDuration, calcWarrantyExpiry } from "@/lib/duration";
+import { parseProductType } from "@/lib/product";
 
 export const dynamic = 'force-dynamic';
 
@@ -93,89 +94,118 @@ export async function POST(req: NextRequest) {
     const durationFromName = productName ? parseDuration(productName) : 0;
     const durationDays = durationFromName > 0 ? durationFromName : rawDuration;
 
+    // FIX #4: Deteksi productType dari nama produk
+    const detectedProductType = parseProductType(productName || "");
+
     if (!email || !name || !whatsapp) {
       return NextResponse.json({ error: "Email, nama, dan WhatsApp wajib diisi" }, { status: 400 });
     }
 
-    // 1. Cari atau buat user
-    let user = await prisma.user.findUnique({ where: { email } });
-    if (!user) {
-      user = await prisma.user.create({
-        data: { email, name, whatsapp },
+    // FIX #1: Wrap seluruh proses dalam prisma.$transaction (atomic)
+    // Mencegah race condition: 2 request bersamaan tidak bisa ambil slot yang sama
+    const result = await prisma.$transaction(async (tx) => {
+      // 1. Cari atau buat user
+      let user = await tx.user.findUnique({ where: { email } });
+      if (!user) {
+        user = await tx.user.create({
+          data: { email, name, whatsapp },
+        });
+      } else {
+        // Update user type ke returning
+        user = await tx.user.update({
+          where: { id: user.id },
+          data: {
+            customerType: "returning",
+            subscriptionStatus: "active",
+            followUpStatus: "none",
+            ...(whatsapp && { whatsapp }),
+          },
+        });
+      }
+
+      // 2. FIX #4: Cari stok akun yang sesuai TIPE PRODUK, available atau masih ada slot
+      // Diurutkan usedSlots ASC supaya akun dengan slot paling sedikit dipilih duluan (round-robin)
+      const candidateAccounts = await tx.stockAccount.findMany({
+        where: {
+          status: { in: ["available", "in_use"] },
+          productType: detectedProductType, // FIX #4: filter by productType
+        },
+        orderBy: [{ usedSlots: "asc" }, { createdAt: "asc" }],
       });
-    } else {
-      // Update user type ke returning
-      await prisma.user.update({
-        where: { id: user.id },
+
+      // Filter di JS karena maxSlots beda tiap record
+      const availableAccount = candidateAccounts.find(acc =>
+        (acc.usedSlots ?? 0) < (acc.maxSlots ?? 3)
+      ) ?? null;
+
+      if (!availableAccount) {
+        throw new Error(`STOK_HABIS:Stok akun ${detectedProductType} habis! Tidak ada akun tersedia.`);
+      }
+
+      // 3. Hitung tanggal expired garansi (fix days, bukan calendar month)
+      const warrantyExpiredAt = calcWarrantyExpiry(new Date(), durationDays);
+
+      // 4. Buat transaksi
+      const transaction = await tx.transaction.create({
         data: {
-          customerType: "returning",
-          subscriptionStatus: "active",
-          followUpStatus: "none",
-          ...(whatsapp && { whatsapp }),
+          userId: user.id,
+          stockAccountId: availableAccount.id,
+          amount: amount || 0,
+          productName: productName || null,
+          status: "success",
+          isManual: true,
+          warrantyExpiredAt,
+        },
+        include: {
+          user: true,
+          stockAccount: true,
         },
       });
-    }
 
-    // 2. Cari stok akun yang available atau masih ada slot (round-robin: slot paling sedikit dulu)
-    // Diurutkan usedSlots ASC supaya akun dengan slot paling sedikit dipilih duluan
-    const candidateAccounts = await prisma.stockAccount.findMany({
-      where: { status: { in: ["available", "in_use"] } },
-      orderBy: [{ usedSlots: "asc" }, { createdAt: "asc" }],
-    });
+      // 5. FIX #1: Atomic update slot — updateMany dengan kondisi slot check
+      // Jika ada race condition, updated.count akan 0 dan transaction akan di-rollback
+      const newUsedSlots = (availableAccount.usedSlots ?? 0) + 1;
+      const maxSlots = availableAccount.maxSlots ?? 3;
+      const updated = await tx.stockAccount.updateMany({
+        where: {
+          id: availableAccount.id,
+          usedSlots: { lt: maxSlots }, // Atomic guard: hanya update jika slot masih tersedia
+        },
+        data: {
+          status: newUsedSlots >= maxSlots ? "full" : "in_use",
+          usedSlots: { increment: 1 },
+        },
+      });
+      if (updated.count === 0) {
+        throw new Error(`SLOT_PENUH:Slot akun sudah penuh (terjadi bersamaan). Silakan coba lagi.`);
+      }
 
-    // Filter di JS karena maxSlots beda tiap record
-    const availableAccount = candidateAccounts.find(acc =>
-      (acc.usedSlots ?? 0) < (acc.maxSlots ?? 3)
-    ) ?? null;
+      // 6. Update status user menjadi active
+      await tx.user.update({
+        where: { id: user.id },
+        data: { subscriptionStatus: "active", followUpStatus: "none" },
+      });
 
-    if (!availableAccount) {
-      return NextResponse.json({ error: "Stok akun habis! Tidak ada akun tersedia." }, { status: 400 });
-    }
-
-    // 3. Hitung tanggal expired garansi (fix days, bukan calendar month)
-    const warrantyExpiredAt = calcWarrantyExpiry(new Date(), durationDays);
-
-    // 4. Buat transaksi
-    const transaction = await prisma.transaction.create({
-      data: {
-        userId: user.id,
-        stockAccountId: availableAccount.id,
-        amount: amount || 0,
-        productName: productName || null,
-        status: "success",
-        isManual: true,
-        warrantyExpiredAt,
-      },
-      include: {
-        user: true,
-        stockAccount: true,
-      },
-    });
-
-    // 5. Update status stok jadi in_use dan increment slot
-    await prisma.stockAccount.update({
-      where: { id: availableAccount.id },
-      data: {
-        status: "in_use",
-        usedSlots: { increment: 1 },
-      },
-    });
-
-    // 6. Update status user menjadi active
-    await prisma.user.update({
-      where: { id: user.id },
-      data: { subscriptionStatus: "active", followUpStatus: "none" },
+      return { transaction, availableAccount };
     });
 
     return NextResponse.json({
-      transaction,
+      transaction: result.transaction,
       account: {
-        email: availableAccount.accountEmail,
-        password: availableAccount.accountPassword,
+        email: result.availableAccount.accountEmail,
+        password: result.availableAccount.accountPassword,
       },
       message: "Data transaksi berhasil ditambahkan, kirim data akun ke pelanggan?",
     }, { status: 201 });
   } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    // Tangani error khusus dari dalam $transaction
+    if (msg.startsWith("STOK_HABIS:")) {
+      return NextResponse.json({ error: msg.replace("STOK_HABIS:", "") }, { status: 400 });
+    }
+    if (msg.startsWith("SLOT_PENUH:")) {
+      return NextResponse.json({ error: msg.replace("SLOT_PENUH:", "") }, { status: 409 });
+    }
     console.error("POST /api/transactions error:", error);
     return NextResponse.json({ error: "Gagal membuat transaksi" }, { status: 500 });
   }
