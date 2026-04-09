@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
+import { createPortal } from "react-dom";
 import Topbar from "@/components/Topbar";
 import { usePrivacy } from "@/context/PrivacyContext";
 import {
@@ -15,6 +16,9 @@ import {
   MessageCircle,
   Download,
   Tag,
+  Plus,
+  X,
+  Check,
 } from "lucide-react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -61,6 +65,14 @@ export default function RetentionPage() {
   const [allTags, setAllTags] = useState<TagItem[]>([]);
   const [activeTagId, setActiveTagId] = useState<string | null>(null);
 
+  // Tag popover
+  const [tagPopoverUserId, setTagPopoverUserId] = useState<string | null>(null);
+  const [tagPopoverPos, setTagPopoverPos] = useState<{ top: number; left: number } | null>(null);
+  const popoverRef = useRef<HTMLDivElement>(null);
+  // Local optimistic overrides: userId → Set of tagIds
+  const [localTagOverrides, setLocalTagOverrides] = useState<Map<string, Set<string>>>(new Map());
+  const [savingTag, setSavingTag] = useState(false);
+
   // Default filter dates
   const td = new Date();
   const todayStr = td.toISOString().split("T")[0];
@@ -83,6 +95,20 @@ export default function RetentionPage() {
       .catch(console.error);
   }, []);
 
+  // ─── Close popover on outside click ──────────────────────────────────────────
+
+  useEffect(() => {
+    if (!tagPopoverUserId) return;
+    function handle(e: MouseEvent) {
+      if (popoverRef.current && !popoverRef.current.contains(e.target as Node)) {
+        setTagPopoverUserId(null);
+        setTagPopoverPos(null);
+      }
+    }
+    document.addEventListener("mousedown", handle);
+    return () => document.removeEventListener("mousedown", handle);
+  }, [tagPopoverUserId]);
+
   // ─── Fetch Retention Data ─────────────────────────────────────────────────
 
   const fetchRetention = useCallback(async () => {
@@ -97,12 +123,62 @@ export default function RetentionPage() {
     try {
       const res = await fetch(`/api/analytics/retention?${params}`);
       const json = await res.json();
-      if (json.success) setData(json);
+      if (json.success) {
+        setData(json);
+        // Clear local overrides on fresh fetch
+        setLocalTagOverrides(new Map());
+      }
     } catch (e) { console.error(e); }
     setLoading(false);
   }, [startA, endA, startB, endB, activeTagId]);
 
   useEffect(() => { fetchRetention(); }, [fetchRetention]);
+
+  // ─── Tag helpers ─────────────────────────────────────────────────────────────
+
+  function getCustomerTagIds(customer: CustomerRetention): Set<string> {
+    if (localTagOverrides.has(customer.id)) {
+      return localTagOverrides.get(customer.id)!;
+    }
+    return new Set(customer.tags?.map(ct => ct.tag.id) || []);
+  }
+
+  async function handleToggleTag(customer: CustomerRetention, tagId: string) {
+    const currentIds = getCustomerTagIds(customer);
+    const hasTag = currentIds.has(tagId);
+
+    // Optimistic update
+    const newSet = new Set(currentIds);
+    if (hasTag) newSet.delete(tagId);
+    else newSet.add(tagId);
+    setLocalTagOverrides(prev => new Map(prev).set(customer.id, newSet));
+
+    setSavingTag(true);
+    try {
+      await fetch(`/api/users/${customer.id}/tags`, {
+        method: hasTag ? "DELETE" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tagId }),
+      });
+    } catch (e) {
+      // Rollback on error
+      setLocalTagOverrides(prev => new Map(prev).set(customer.id, currentIds));
+      console.error(e);
+    }
+    setSavingTag(false);
+  }
+
+  function openTagPopover(e: React.MouseEvent<HTMLButtonElement>, userId: string) {
+    e.stopPropagation();
+    if (tagPopoverUserId === userId) {
+      setTagPopoverUserId(null);
+      setTagPopoverPos(null);
+      return;
+    }
+    const rect = e.currentTarget.getBoundingClientRect();
+    setTagPopoverPos({ top: rect.bottom + 6, left: rect.left });
+    setTagPopoverUserId(userId);
+  }
 
   // ─── WA Follow Up ────────────────────────────────────────────────────────────
 
@@ -159,11 +235,15 @@ export default function RetentionPage() {
 
   const activeTag = allTags.find(t => t.id === activeTagId) ?? null;
 
+  // ─── Tag Popover customer ─────────────────────────────────────────────────────
+
+  const popoverCustomer = tagPopoverUserId ? filteredCustomers.find(c => c.id === tagPopoverUserId) : null;
+
   return (
     <div>
       <Topbar title="Analisis Retensi" subtitle="Lacak pelanggan yang repeat order (perpanjang) antar dua periode." />
 
-      <div className="px-8 pb-8 space-y-5">
+      <div className="px-4 md:px-8 pb-8 space-y-5">
 
         {/* Date Filter Section */}
         <div className="glass-card p-4 flex flex-wrap lg:flex-nowrap items-end gap-6">
@@ -195,7 +275,7 @@ export default function RetentionPage() {
         </div>
 
         {/* Mini Stats */}
-        <div className="grid grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div className="glass-card p-4">
             <div className="flex items-center justify-between mb-2">
               <p className="text-xs text-[var(--text-muted)] font-medium">Total Beli Periode A</p>
@@ -313,7 +393,7 @@ export default function RetentionPage() {
                 <thead>
                   <tr>
                     <th>Pelanggan</th>
-                    {allTags.length > 0 && <th>Label</th>}
+                    <th>Label</th>
                     <th className="text-center">Order Per. A</th>
                     <th className="text-center">Order Per. B</th>
                     <th>Status</th>
@@ -321,71 +401,90 @@ export default function RetentionPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredCustomers.map(c => (
-                    <tr key={c.id}>
-                      <td>
-                        <p className="text-sm font-medium text-white">{c.name}</p>
-                        <p className="text-xs text-[var(--text-muted)] font-mono">{maskPhone(c.whatsapp) || maskEmail(c.email)}</p>
-                      </td>
+                  {filteredCustomers.map(c => {
+                    const tagIds = getCustomerTagIds(c);
+                    const customerTagObjs = allTags.filter(t => tagIds.has(t.id));
 
-                      {/* Tag badges — hanya tampil jika ada tag di sistem */}
-                      {allTags.length > 0 && (
+                    return (
+                      <tr key={c.id}>
                         <td>
-                          <div className="flex items-center gap-1 flex-wrap" style={{ minWidth: 90 }}>
-                            {!c.tags || c.tags.length === 0 ? (
-                              <span className="text-xs text-[var(--text-muted)]">—</span>
-                            ) : (
-                              c.tags.slice(0, 2).map((ct) => (
-                                <span
-                                  key={ct.tag.id}
-                                  className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full"
-                                  style={{
-                                    background: `${ct.tag.color}22`,
-                                    color: ct.tag.color,
-                                    border: `1px solid ${ct.tag.color}44`,
-                                  }}
-                                >
-                                  {ct.tag.name}
-                                </span>
-                              ))
+                          <p className="text-sm font-medium text-white">{c.name}</p>
+                          <p className="text-xs text-[var(--text-muted)] font-mono">{maskPhone(c.whatsapp) || maskEmail(c.email)}</p>
+                        </td>
+
+                        {/* ── Label cell (interactive) ─────────────────── */}
+                        <td>
+                          <div className="flex items-center gap-1 flex-wrap" style={{ minWidth: 100 }}>
+                            {customerTagObjs.slice(0, 2).map((tag) => (
+                              <span
+                                key={tag.id}
+                                className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full"
+                                style={{
+                                  background: `${tag.color}22`,
+                                  color: tag.color,
+                                  border: `1px solid ${tag.color}44`,
+                                }}
+                              >
+                                {tag.name}
+                              </span>
+                            ))}
+                            {customerTagObjs.length > 2 && (
+                              <span className="text-[11px] text-[var(--text-muted)]">+{customerTagObjs.length - 2}</span>
                             )}
-                            {(c.tags?.length || 0) > 2 && (
-                              <span className="text-[11px] text-[var(--text-muted)]">+{c.tags!.length - 2}</span>
+                            {allTags.length > 0 && (
+                              <button
+                                id={`tag-btn-${c.id}`}
+                                onClick={(e) => openTagPopover(e, c.id)}
+                                className="btn-icon flex-shrink-0 transition-all"
+                                style={{
+                                  width: 22, height: 22, borderRadius: 6,
+                                  background: tagPopoverUserId === c.id ? "rgba(99,102,241,0.2)" : "rgba(255,255,255,0.05)",
+                                  border: `1px solid ${tagPopoverUserId === c.id ? "rgba(99,102,241,0.5)" : "rgba(255,255,255,0.1)"}`,
+                                  color: tagPopoverUserId === c.id ? "#818cf8" : "var(--text-muted)",
+                                }}
+                                title="Kelola label"
+                              >
+                                {savingTag && tagPopoverUserId === c.id
+                                  ? <Loader2 size={11} className="animate-spin" />
+                                  : customerTagObjs.length === 0
+                                    ? <Plus size={11} />
+                                    : <Tag size={11} />}
+                              </button>
                             )}
                           </div>
                         </td>
-                      )}
 
-                      <td className="text-center">
-                        <span className="text-sm font-semibold">{c.periodATransactions}x</span>
-                        <p className="text-[10px] text-[var(--text-muted)]">{formatRp(c.periodAAmount)}</p>
-                      </td>
-                      <td className="text-center">
-                        {c.periodBTransactions > 0 ? (
-                          <>
-                            <span className="text-sm font-semibold text-emerald-400">{c.periodBTransactions}x</span>
-                            <p className="text-[10px] text-emerald-400/70">{formatRp(c.periodBAmount)}</p>
-                          </>
-                        ) : (
-                          <span className="text-xs text-[var(--text-muted)]">—</span>
-                        )}
-                      </td>
-                      <td>
-                        {c.status === "retained" ? (
-                          <span className="badge badge-success"><CheckCircle size={12} /> Repeat</span>
-                        ) : (
-                          <span className="badge badge-danger"><XCircle size={12} /> Belum</span>
-                        )}
-                      </td>
-                      <td>
-                        {c.status === "churned" && c.whatsapp && (
-                          <button onClick={() => followUpWA(c)} className="btn-secondary !py-1 !px-2.5 text-xs flex items-center gap-1 border-emerald-500/30 hover:bg-emerald-500/10 hover:text-emerald-400">
-                            <MessageCircle size={12} /> Chat WA
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
+                        <td className="text-center">
+                          <span className="text-sm font-semibold">{c.periodATransactions}x</span>
+                          <p className="text-[10px] text-[var(--text-muted)]">{formatRp(c.periodAAmount)}</p>
+                        </td>
+                        <td className="text-center">
+                          {c.periodBTransactions > 0 ? (
+                            <>
+                              <span className="text-sm font-semibold text-emerald-400">{c.periodBTransactions}x</span>
+                              <p className="text-[10px] text-emerald-400/70">{formatRp(c.periodBAmount)}</p>
+                            </>
+                          ) : (
+                            <span className="text-xs text-[var(--text-muted)]">—</span>
+                          )}
+                        </td>
+                        <td>
+                          {c.status === "retained" ? (
+                            <span className="badge badge-success"><CheckCircle size={12} /> Repeat</span>
+                          ) : (
+                            <span className="badge badge-danger"><XCircle size={12} /> Belum</span>
+                          )}
+                        </td>
+                        <td>
+                          {c.status === "churned" && c.whatsapp && (
+                            <button onClick={() => followUpWA(c)} className="btn-secondary !py-1 !px-2.5 text-xs flex items-center gap-1 border-emerald-500/30 hover:bg-emerald-500/10 hover:text-emerald-400">
+                              <MessageCircle size={12} /> Chat WA
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
               <div className="px-6 py-4 border-t border-[var(--border-color)] text-xs text-[var(--text-muted)]">
@@ -403,6 +502,76 @@ export default function RetentionPage() {
           )}
         </div>
       </div>
+
+      {/* ── Tag Picker Popover (Portal) ────────────────────────────────────── */}
+      {tagPopoverUserId && tagPopoverPos && popoverCustomer && typeof window !== "undefined" &&
+        createPortal(
+          <div
+            ref={popoverRef}
+            className="rounded-xl border border-[var(--border-color)] shadow-2xl overflow-hidden"
+            style={{
+              position: "fixed",
+              top: tagPopoverPos.top,
+              left: Math.min(tagPopoverPos.left, window.innerWidth - 220),
+              zIndex: 9999,
+              width: 210,
+              background: "rgba(15,17,30,0.97)",
+              backdropFilter: "blur(16px)",
+            }}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between px-3 py-2 border-b border-[var(--border-color)]">
+              <span className="text-xs font-semibold text-[var(--text-secondary)] flex items-center gap-1.5">
+                <Tag size={11} /> Kelola Label
+              </span>
+              <button
+                className="btn-icon"
+                style={{ width: 20, height: 20 }}
+                onClick={() => { setTagPopoverUserId(null); setTagPopoverPos(null); }}
+              >
+                <X size={12} />
+              </button>
+            </div>
+
+            {/* Tag list */}
+            <div className="py-1 max-h-52 overflow-y-auto">
+              {allTags.length === 0 ? (
+                <p className="text-xs text-[var(--text-muted)] px-3 py-2">Belum ada label. Buat di halaman Pelanggan.</p>
+              ) : (
+                allTags.map(tag => {
+                  const tagIds = getCustomerTagIds(popoverCustomer);
+                  const isActive = tagIds.has(tag.id);
+                  return (
+                    <button
+                      key={tag.id}
+                      onClick={() => handleToggleTag(popoverCustomer, tag.id)}
+                      className="w-full flex items-center gap-2 px-3 py-1.5 text-left transition-colors hover:bg-white/5"
+                    >
+                      {/* Color dot */}
+                      <span
+                        className="w-2.5 h-2.5 rounded-full flex-shrink-0"
+                        style={{ background: tag.color }}
+                      />
+                      {/* Name */}
+                      <span
+                        className="text-xs font-medium flex-1 truncate"
+                        style={{ color: isActive ? tag.color : "var(--text-secondary)" }}
+                      >
+                        {tag.name}
+                      </span>
+                      {/* Checkmark */}
+                      {isActive && (
+                        <Check size={12} style={{ color: tag.color, flexShrink: 0 }} />
+                      )}
+                    </button>
+                  );
+                })
+              )}
+            </div>
+          </div>,
+          document.body
+        )
+      }
     </div>
   );
 }
