@@ -96,12 +96,14 @@ export async function POST(req: NextRequest) {
     const defaultMaxSlots = oldProductType === "desktop" ? 2 : 3;
 
     // Cari akun baru yang tersedia dengan productType yang SAMA
+    // PENTING: exclude akun lama agar tidak reassign akun yang sama!
     const candidateAccounts = await prisma.stockAccount.findMany({
       where: {
         status: { in: ["available", "in_use"] },
         productType: oldProductType,
+        ...(transaction.stockAccountId ? { id: { not: transaction.stockAccountId } } : {}),
       },
-      orderBy: { createdAt: "asc" },
+      orderBy: [{ usedSlots: "asc" }, { createdAt: "asc" }],
     });
 
     const newAccount = candidateAccounts.find(acc =>
