@@ -192,10 +192,13 @@ function FollowupPageInner() {
       whatsappNumber: r.phone,
       customerName: r.name,
     }));
+    // datetime-local gives "2026-04-09T15:32" (no timezone)
+    // Explicitly append +07:00 (WIB) so server stores correct UTC
+    const scheduledAtWIB = formDate.includes("+") || formDate.endsWith("Z") ? formDate : formDate + ":00+07:00";
     await fetch("/api/followups", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title: formTitle, messageTemplate: formTemplate, scheduledAt: formDate, recipients }),
+      body: JSON.stringify({ title: formTitle, messageTemplate: formTemplate, scheduledAt: scheduledAtWIB, recipients }),
     });
     setShowForm(false);
     resetForm();
