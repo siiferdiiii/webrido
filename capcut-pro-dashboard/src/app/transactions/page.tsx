@@ -186,9 +186,13 @@ export default function TransactionsPage() {
     setSendingAccount(true);
     setSendResult(null);
     try {
-      // 1. Ambil stok akun tersedia sesuai tipe
-      const stockRes = await fetch(`/api/stock?status=available&productType=${accountType}&limit=1`);
+      // 1. Ambil stok akun tersedia sesuai tipe + template dari settings (parallel)
+      const [stockRes, settingsRes] = await Promise.all([
+        fetch(`/api/stock?status=available&productType=${accountType}&limit=1`),
+        fetch("/api/settings"),
+      ]);
       const stockJson = await stockRes.json();
+      const settingsJson = await settingsRes.json();
       const account = stockJson.accounts?.[0];
 
       if (!account) {
@@ -197,7 +201,18 @@ export default function TransactionsPage() {
         return;
       }
 
-      // 2. Kirim ke webhook
+      // 2. Render template pesan dengan variabel dinamis
+      const templateRaw: string = settingsJson.template_send_account || "";
+      const tipeLabel = accountType === 'mobile' ? 'Mobile (HP/iPad)' : 'Desktop (PC/Mac)';
+      const renderedMessage = templateRaw
+        .replaceAll("{{nama}}", form.name)
+        .replaceAll("{{email}}", form.email)
+        .replaceAll("{{akun_email}}", account.accountEmail)
+        .replaceAll("{{akun_password}}", account.accountPassword)
+        .replaceAll("{{tipe}}", tipeLabel)
+        .replaceAll("{{durasi}}", String(account.durationDays || 30));
+
+      // 3. Kirim ke webhook dengan template message
       const whatsapp = form.whatsapp.replace(/^0/, "62").replace(/\D/g, "");
       await fetch(WEBHOOK_URL, {
         method: "POST",
@@ -210,10 +225,11 @@ export default function TransactionsPage() {
           accountPassword: account.accountPassword,
           productType: accountType,
           durationDays: account.durationDays || 30,
+          message: renderedMessage, // template yang sudah di-render
         }),
       });
 
-      // 3. Update usedSlots di stok (tandai slot terpakai)
+      // 4. Update usedSlots di stok (tandai slot terpakai)
       await fetch(`/api/stock/${account.id}/use`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -226,6 +242,7 @@ export default function TransactionsPage() {
     }
     setSendingAccount(false);
   }
+
 
   function closeModal() {
     setShowModal(false);

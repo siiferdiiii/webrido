@@ -51,15 +51,17 @@ export async function GET(req: NextRequest) {
       ];
     }
 
-    // ── Status filter (60-day dynamic) ────────────────────────────────────────
-    const sixtyDaysAgo = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000);
+    // ── Status filter (dynamic active days from settings) ─────────────────────
+    const settingDays = await prisma.appSetting.findUnique({ where: { key: "customer_active_days" } });
+    const activeDays = Math.max(1, parseInt(settingDays?.value || "60") || 60);
+    const cutoffDate = new Date(Date.now() - activeDays * 24 * 60 * 60 * 1000);
     if (status === "active") {
       where.transactions = {
-        some: { status: "success", purchaseDate: { gte: sixtyDaysAgo } },
+        some: { status: "success", purchaseDate: { gte: cutoffDate } },
       };
     } else if (status === "inactive") {
       where.transactions = {
-        none: { status: "success", purchaseDate: { gte: sixtyDaysAgo } },
+        none: { status: "success", purchaseDate: { gte: cutoffDate } },
       };
     }
 

@@ -123,7 +123,11 @@ export default function Sidebar() {
 
         {/* Footer */}
         <div className="px-4 py-4 border-t border-[rgba(99,102,241,0.15)]">
-          <Link href="/settings" className="sidebar-link" onClick={handleLinkClick}>
+          <Link
+            href="/settings"
+            className={`sidebar-link ${pathname === '/settings' ? 'active' : ''}`}
+            onClick={handleLinkClick}
+          >
             <Settings size={18} />
             Pengaturan
           </Link>

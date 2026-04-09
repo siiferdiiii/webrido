@@ -199,3 +199,13 @@ model CustomerTag {
   @@id([userId, tagId])
   @@map("customer_tags")
 }
+
+// ===== App Settings (key-value store) =====
+
+model AppSetting {
+  key       String   @id @db.VarChar(100)
+  value     String   // JSON string atau plain string
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@map("app_settings")
+}
