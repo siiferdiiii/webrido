@@ -11,6 +11,7 @@ function RegisterForm() {
 
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
+  const [whatsapp, setWhatsapp] = useState("");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [showPass, setShowPass] = useState(false);
@@ -39,6 +40,10 @@ function RegisterForm() {
     e.preventDefault();
     setError("");
 
+    if (!whatsapp.trim()) {
+      setError("Nomor WhatsApp wajib diisi");
+      return;
+    }
     if (password !== confirm) {
       setError("Password dan konfirmasi password tidak cocok");
       return;
@@ -53,7 +58,7 @@ function RegisterForm() {
       const res = await fetch("/api/auth/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, email, password, inviteToken }),
+        body: JSON.stringify({ name, email, whatsapp: whatsapp.trim(), password, inviteToken }),
       });
       const json = await res.json();
       if (!res.ok) {
@@ -103,6 +108,10 @@ function RegisterForm() {
       <div>
         <label className="block text-xs font-semibold text-[rgba(255,255,255,0.5)] mb-1.5 uppercase tracking-wider">Email</label>
         <input type="email" placeholder="admin@email.com" value={email} onChange={e => setEmail(e.target.value)} required className="form-input w-full" />
+      </div>
+      <div>
+        <label className="block text-xs font-semibold text-[rgba(255,255,255,0.5)] mb-1.5 uppercase tracking-wider">No. WhatsApp <span className="text-rose-400">*</span></label>
+        <input type="tel" placeholder="08xxxxxxxxxx" value={whatsapp} onChange={e => setWhatsapp(e.target.value)} required className="form-input w-full" />
       </div>
       <div>
         <label className="block text-xs font-semibold text-[rgba(255,255,255,0.5)] mb-1.5 uppercase tracking-wider">Password</label>

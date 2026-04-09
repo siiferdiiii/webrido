@@ -219,9 +219,78 @@ model AdminUser {
   password    String   @db.VarChar(255)
   role        String   @default("admin") @map("role") @db.VarChar(50)
   status      String   @default("inactive") @db.VarChar(50)
-  permissions Json?    // null = no access; JSON object per fitur
+  permissions Json?
+  whatsapp    String?  @db.VarChar(20)
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt   DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
+  schedule    AdminSchedule?
+  tasks       TaskAssignment[]
+  attendance  AttendanceRecord[]
+
   @@map("admin_users")
+}
+
+// ===== Attendance: Jadwal Shift =====
+
+model AdminSchedule {
+  id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  adminId    String    @unique @db.Uuid
+  admin      AdminUser @relation(fields: [adminId], references: [id], onDelete: Cascade)
+  shiftStart String    @db.VarChar(5)   // "08:00" WIB
+  shiftEnd   String    @db.VarChar(5)   // "17:00" WIB
+  isActive   Boolean   @default(true)
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt  DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@map("admin_schedules")
+}
+
+// ===== Task Management (RKHI) =====
+
+model Task {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  title          String    @db.VarChar(255)
+  description    String?   @db.Text
+  recurrenceType String    @default("daily") @db.VarChar(20) // "daily" | "once"
+  scheduledDate  String?   @db.VarChar(10)  // "2026-04-09" — only for recurrenceType=once
+  isActive       Boolean   @default(true)
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  assignments TaskAssignment[]
+
+  @@map("tasks")
+}
+
+model TaskAssignment {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  taskId      String    @db.Uuid
+  task        Task      @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  adminId     String    @db.Uuid
+  admin       AdminUser @relation(fields: [adminId], references: [id], onDelete: Cascade)
+  date        String    @db.VarChar(10)  // "2026-04-09" — copy baru per hari via cron
+  status      String    @default("pending") @db.VarChar(20) // pending | done
+  completedAt DateTime? @map("completed_at") @db.Timestamptz(6)
+  assignedAt  DateTime  @default(now()) @map("assigned_at") @db.Timestamptz(6)
+
+  @@unique([taskId, adminId, date])
+  @@map("task_assignments")
+}
+
+// ===== Attendance Records =====
+
+model AttendanceRecord {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  adminId        String    @db.Uuid
+  admin          AdminUser @relation(fields: [adminId], references: [id], onDelete: Cascade)
+  date           String    @db.VarChar(10)  // "2026-04-09"
+  checkInAt      DateTime? @map("check_in_at") @db.Timestamptz(6)
+  checkOutAt     DateTime? @map("check_out_at") @db.Timestamptz(6)
+  webhookSentIn  Boolean   @default(false) @map("webhook_sent_in")
+  webhookSentOut Boolean   @default(false) @map("webhook_sent_out")
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@unique([adminId, date])
+  @@map("attendance_records")
 }

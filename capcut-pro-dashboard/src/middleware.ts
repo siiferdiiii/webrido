@@ -9,6 +9,7 @@ const PUBLIC_PATHS = [
   "/api/auth/register",
   "/api/auth/me",
   "/api/webhook",
+  "/api/cron",
 ];
 
 export async function middleware(req: NextRequest) {

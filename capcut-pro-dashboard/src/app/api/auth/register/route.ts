@@ -6,7 +6,11 @@ import { hashPassword, DEFAULT_ADMIN_PERMISSIONS } from "@/lib/auth";
 // Requires valid invite_token query param (except first-ever registration)
 export async function POST(req: NextRequest) {
   try {
-    const { name, email, password, inviteToken } = await req.json();
+    const { name, email, password, inviteToken, whatsapp } = await req.json();
+
+    if (!whatsapp?.trim()) {
+      return NextResponse.json({ error: "Nomor WhatsApp wajib diisi" }, { status: 400 });
+    }
 
     if (!name || !email || !password) {
       return NextResponse.json({ error: "Nama, email, dan password wajib diisi" }, { status: 400 });
@@ -46,6 +50,7 @@ export async function POST(req: NextRequest) {
         email: email.toLowerCase().trim(),
         name: name.trim(),
         password: hashed,
+        whatsapp: whatsapp.trim(),
         role: isFirstUser ? "developer" : "admin",
         status: isFirstUser ? "active" : "inactive",
         permissions: isFirstUser ? undefined : DEFAULT_ADMIN_PERMISSIONS,
