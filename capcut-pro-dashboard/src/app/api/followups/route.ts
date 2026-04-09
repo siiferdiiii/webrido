@@ -84,11 +84,18 @@ export async function POST(req: NextRequest) {
     // Send to n8n Webhook
     try {
       const webhookUrl = "https://appsheetindonesia-dorrizstore.qxifii.easypanel.host/webhook/5ba40d68-0e44-4e0a-ac6a-b0df499653a4";
+
+      // Hitung delay dalam menit dari sekarang sampai scheduledAt
+      const nowMs = Date.now();
+      const scheduledMs = new Date(followup.scheduledAt).getTime();
+      const delayMinutes = Math.max(0, Math.round((scheduledMs - nowMs) / 60000));
+
       const payload = {
         followupId: followup.id,
         title: followup.title,
         messageTemplate: followup.messageTemplate,
         scheduledAt: followup.scheduledAt,
+        delayMinutes,
         recipients: followup.recipients.map((r) => ({
           id: r.id,
           whatsappNumber: r.whatsappNumber,
