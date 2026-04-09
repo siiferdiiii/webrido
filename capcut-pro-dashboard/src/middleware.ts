@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifyToken } from "@/lib/auth";
+import { verifyTokenEdge } from "@/lib/auth-edge"; // Edge-compatible only (jose, no bcrypt/prisma)
 
 // Routes that don't require authentication
 const PUBLIC_PATHS = [
@@ -38,7 +38,7 @@ export async function middleware(req: NextRequest) {
     return NextResponse.redirect(new URL("/login", req.url));
   }
 
-  const user = await verifyToken(token);
+  const user = await verifyTokenEdge(token);
   if (!user) {
     if (pathname.startsWith("/api/")) {
       return NextResponse.json({ error: "Token tidak valid" }, { status: 401 });
@@ -46,11 +46,6 @@ export async function middleware(req: NextRequest) {
     const res = NextResponse.redirect(new URL("/login", req.url));
     res.cookies.delete("admin_token");
     return res;
-  }
-
-  // Redirect authenticated user away from login
-  if (pathname === "/login" || pathname === "/register") {
-    return NextResponse.redirect(new URL("/", req.url));
   }
 
   return NextResponse.next();
