@@ -176,7 +176,7 @@ export async function GET(req: NextRequest) {
         }).length
       : total;
 
-    return NextResponse.json({ users: finalUsers, total: effectiveTotal, page, limit });
+    return NextResponse.json({ users: finalUsers, total: effectiveTotal, page, limit, activeDays });
   } catch (error) {
     console.error("GET /api/users error:", error);
     return NextResponse.json({ error: "Gagal mengambil data user" }, { status: 500 });

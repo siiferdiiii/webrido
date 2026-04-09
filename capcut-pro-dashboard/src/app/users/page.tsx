@@ -153,6 +153,9 @@ export default function UsersPage() {
   const [pendingTagChanges, setPendingTagChanges] = useState<Map<string, { draft: Set<string>; original: Set<string> }>>(new Map());
   const [savingAllTags, setSavingAllTags] = useState(false);
 
+  // Customer active days (dari settings, default 60)
+  const [activeDays, setActiveDays] = useState(60);
+
   const formatCurrency = (amount: number) =>
     new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", minimumFractionDigits: 0 }).format(amount);
 
@@ -203,7 +206,11 @@ export default function UsersPage() {
 
     fetch(`/api/users?${buildFilterParams()}`)
       .then((res) => res.json())
-      .then((json) => { setUsers(json.users || []); setTotal(json.total || 0); })
+      .then((json) => {
+        setUsers(json.users || []);
+        setTotal(json.total || 0);
+        if (json.activeDays) setActiveDays(json.activeDays); // sync dari settings
+      })
       .catch(console.error)
       .finally(() => setLoading(false));
   }, [buildFilterParams]);
@@ -359,12 +366,12 @@ export default function UsersPage() {
     }
   }
 
-  /** True jika user punya transaksi dalam 60 hari terakhir */
+  /** True jika user punya transaksi sukses dalam X hari terakhir (dari settings) */
   function isUserActive(user: UserItem): boolean {
     const lastDate = user.transactions[0]?.purchaseDate;
     if (!lastDate) return false;
     const diff = Date.now() - new Date(lastDate).getTime();
-    return diff <= 60 * 24 * 60 * 60 * 1000;
+    return diff <= activeDays * 24 * 60 * 60 * 1000;
   }
 
   function getStatusBadge(user: UserItem) {

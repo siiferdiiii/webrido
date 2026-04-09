@@ -18,18 +18,21 @@ export async function GET() {
       prisma.user.count(),
       prisma.stockAccount.count({ where: { status: "available" } }),
 
-      // Pelanggan Aktif = user yang punya transaksi sukses dalam 60 hari terakhir
-      prisma.user.count({
-        where: {
-          transactions: {
-            some: {
-              status: "success",
-              purchaseDate: {
-                gte: new Date(Date.now() - 60 * 24 * 60 * 60 * 1000),
+      // Pelanggan Aktif = user yang punya transaksi sukses dalam X hari terakhir (dari settings)
+      prisma.appSetting.findUnique({ where: { key: "customer_active_days" } }).then(async (setting) => {
+        const activeDays = Math.max(1, parseInt(setting?.value || "60") || 60);
+        return prisma.user.count({
+          where: {
+            transactions: {
+              some: {
+                status: "success",
+                purchaseDate: {
+                  gte: new Date(Date.now() - activeDays * 24 * 60 * 60 * 1000),
+                },
               },
             },
           },
-        },
+        });
       }),
 
       // 5 transaksi terbaru
