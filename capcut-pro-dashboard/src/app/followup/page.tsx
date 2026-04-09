@@ -65,6 +65,7 @@ function FollowupPageInner() {
   const [submitting, setSubmitting] = useState(false);
   const [importLoading, setImportLoading] = useState(false);
   const [viewMode, setViewMode] = useState<"table" | "card">("table");
+  const [settingsTemplate, setSettingsTemplate] = useState("");
 
   // Form state
   const [formTitle, setFormTitle] = useState("");
@@ -91,6 +92,13 @@ function FollowupPageInner() {
   }, [statusFilter]);
 
   useEffect(() => { fetchFollowups(); }, [fetchFollowups]);
+
+  // Fetch settings template on mount
+  useEffect(() => {
+    fetch("/api/settings").then(r => r.json()).then(d => {
+      if (d.template_followup) setSettingsTemplate(d.template_followup);
+    }).catch(() => {});
+  }, []);
 
   // ── Detect export params dari halaman Pelanggan ──────────────────────────────
   useEffect(() => {
@@ -241,7 +249,12 @@ function FollowupPageInner() {
   return (
     <div>
       <Topbar title="Follow-Up Terjadwal" subtitle="Jadwalkan pengiriman pesan WA ke banyak penerima">
-        <button onClick={() => { setShowForm(true); resetForm(); }} className="btn-primary">
+        <button onClick={() => {
+          setShowForm(true);
+          resetForm();
+          // Auto pre-fill template dari settings
+          if (settingsTemplate) setFormTemplate(settingsTemplate);
+        }} className="btn-primary">
           <Plus size={16} /> Buat Jadwal
         </button>
       </Topbar>
@@ -560,6 +573,13 @@ function FollowupPageInner() {
                     className="badge badge-purple text-[11px] cursor-pointer hover:opacity-80 transition-opacity">
                     {"{{nama_customer}}"}
                   </button>
+                  {settingsTemplate && (
+                    <button type="button"
+                      onClick={() => setFormTemplate(settingsTemplate)}
+                      className="badge badge-info text-[11px] cursor-pointer hover:opacity-80 transition-opacity ml-auto">
+                      ↺ Pakai Template Settings
+                    </button>
+                  )}
                 </div>
                 {formTemplate && formRecipients.length > 0 && (
                   <div className="mt-3 p-3 rounded-xl" style={{ background: "rgba(16,185,129,0.06)", border: "1px solid rgba(16,185,129,0.15)" }}>
