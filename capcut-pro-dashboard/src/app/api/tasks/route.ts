@@ -33,11 +33,18 @@ export async function POST(req: NextRequest) {
   if ("error" in auth) return auth.error;
 
   try {
-    const { title, description } = await req.json();
+    const { title, description, recurrenceType, scheduledDate, periodStart, periodEnd } = await req.json();
     if (!title?.trim()) return NextResponse.json({ error: "Judul tugas wajib diisi" }, { status: 400 });
 
     const task = await prisma.task.create({
-      data: { title: title.trim(), description: description?.trim() || null },
+      data: {
+        title: title.trim(),
+        description: description?.trim() || null,
+        recurrenceType: recurrenceType || "daily",
+        scheduledDate: recurrenceType === "once" ? (scheduledDate || null) : null,
+        periodStart: periodStart || null,
+        periodEnd: periodEnd || null,
+      },
     });
     return NextResponse.json({ task }, { status: 201 });
   } catch (error) {

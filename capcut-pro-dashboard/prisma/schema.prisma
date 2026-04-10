@@ -254,6 +254,8 @@ model Task {
   description    String?   @db.Text
   recurrenceType String    @default("daily") @db.VarChar(20) // "daily" | "once"
   scheduledDate  String?   @db.VarChar(10)  // "2026-04-09" — only for recurrenceType=once
+  periodStart    String?   @map("period_start") @db.VarChar(10) // "2026-04-09" — optional period start
+  periodEnd      String?   @map("period_end") @db.VarChar(10)   // "2026-04-15" — optional period end
   isActive       Boolean   @default(true)
   createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt      DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)

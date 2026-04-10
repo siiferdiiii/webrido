@@ -12,7 +12,7 @@ export async function PATCH(
 
   try {
     const { id } = await params;
-    const { title, description, isActive } = await req.json();
+    const { title, description, isActive, recurrenceType, scheduledDate, periodStart, periodEnd } = await req.json();
 
     const task = await prisma.task.update({
       where: { id },
@@ -20,6 +20,10 @@ export async function PATCH(
         ...(title !== undefined && { title: title.trim() }),
         ...(description !== undefined && { description: description?.trim() || null }),
         ...(isActive !== undefined && { isActive }),
+        ...(recurrenceType !== undefined && { recurrenceType }),
+        ...(recurrenceType !== undefined && { scheduledDate: recurrenceType === "once" ? (scheduledDate || null) : null }),
+        ...(periodStart !== undefined && { periodStart: periodStart || null }),
+        ...(periodEnd !== undefined && { periodEnd: periodEnd || null }),
       },
     });
     return NextResponse.json({ task });

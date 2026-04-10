@@ -11,7 +11,7 @@ import {
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface AdminUser { id: string; name: string; email: string; whatsapp: string | null; status: string; }
-interface Task { id: string; title: string; description: string | null; recurrenceType: "daily" | "once"; scheduledDate: string | null; isActive: boolean; assignments: { adminId: string; admin: { name: string } }[]; }
+interface Task { id: string; title: string; description: string | null; recurrenceType: "daily" | "once"; scheduledDate: string | null; periodStart: string | null; periodEnd: string | null; isActive: boolean; assignments: { adminId: string; admin: { name: string } }[]; }
 interface TaskAssignment { id: string; taskId: string; adminId: string; date: string; status: "pending" | "done"; completedAt: string | null; task: { title: string; description: string | null }; }
 interface Schedule { id?: string; adminId: string; shiftStart: string; shiftEnd: string; isActive: boolean; }
 interface AttendanceRecord { id: string; adminId: string; date: string; checkInAt: string | null; checkOutAt: string | null; webhookSentIn: boolean; webhookSentOut: boolean; admin: { name: string; email: string; whatsapp: string | null }; }
@@ -40,6 +40,8 @@ export default function AbsensiPage() {
   const [taskDesc, setTaskDesc] = useState("");
   const [taskRecurrence, setTaskRecurrence] = useState<"daily" | "once">("daily");
   const [taskDate, setTaskDate] = useState(todayWIB());
+  const [taskPeriodStart, setTaskPeriodStart] = useState("");
+  const [taskPeriodEnd, setTaskPeriodEnd] = useState("");
   const [savingTask, setSavingTask] = useState(false);
 
   // ── Schedule state ──
@@ -125,17 +127,25 @@ export default function AbsensiPage() {
   async function saveTask() {
     setSavingTask(true);
     try {
-      const body = { title: taskTitle, description: taskDesc || null, recurrenceType: taskRecurrence, scheduledDate: taskRecurrence === "once" ? taskDate : null };
+      const body = {
+        title: taskTitle,
+        description: taskDesc || null,
+        recurrenceType: taskRecurrence,
+        scheduledDate: taskRecurrence === "once" ? taskDate : null,
+        periodStart: taskPeriodStart || null,
+        periodEnd: taskPeriodEnd || null,
+      };
       const url = editingTask ? `/api/tasks/${editingTask.id}` : "/api/tasks";
       const method = editingTask ? "PATCH" : "POST";
       const res = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-      if (res.ok) { setShowTaskForm(false); setEditingTask(null); setTaskTitle(""); setTaskDesc(""); loadData(); }
+      if (res.ok) { setShowTaskForm(false); setEditingTask(null); setTaskTitle(""); setTaskDesc(""); setTaskPeriodStart(""); setTaskPeriodEnd(""); loadData(); }
     } finally { setSavingTask(false); }
   }
 
   function openEditTask(t: Task) {
     setEditingTask(t); setTaskTitle(t.title); setTaskDesc(t.description || "");
     setTaskRecurrence(t.recurrenceType); setTaskDate(t.scheduledDate || todayWIB());
+    setTaskPeriodStart(t.periodStart || ""); setTaskPeriodEnd(t.periodEnd || "");
     setShowTaskForm(true);
   }
 
@@ -234,7 +244,7 @@ export default function AbsensiPage() {
                 {/* Header + Add button */}
                 <div className="flex items-center justify-between">
                   <p className="text-sm text-[var(--text-muted)]">{tasks.length} tugas terdaftar</p>
-                  <button onClick={() => { setEditingTask(null); setTaskTitle(""); setTaskDesc(""); setTaskRecurrence("daily"); setShowTaskForm(true); }}
+                  <button onClick={() => { setEditingTask(null); setTaskTitle(""); setTaskDesc(""); setTaskRecurrence("daily"); setTaskPeriodStart(""); setTaskPeriodEnd(""); setShowTaskForm(true); }}
                     className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold text-white transition-all"
                     style={{ background: "var(--gradient-primary)" }}>
                     <Plus size={14} /> Buat Tugas
@@ -260,6 +270,18 @@ export default function AbsensiPage() {
                       {taskRecurrence === "once" && (
                         <input type="date" className="form-input text-xs" value={taskDate} onChange={e => setTaskDate(e.target.value)} />
                       )}
+                    </div>
+                    {/* Periode tugas */}
+                    <div className="space-y-1.5">
+                      <p className="text-[10px] text-[var(--text-muted)] uppercase font-semibold">Periode (opsional)</p>
+                      <div className="flex gap-2 items-center flex-wrap">
+                        <input type="date" className="form-input text-xs" placeholder="Mulai" value={taskPeriodStart} onChange={e => setTaskPeriodStart(e.target.value)} />
+                        <span className="text-xs text-[var(--text-muted)]">s/d</span>
+                        <input type="date" className="form-input text-xs" placeholder="Selesai" value={taskPeriodEnd} onChange={e => setTaskPeriodEnd(e.target.value)} />
+                        {(taskPeriodStart || taskPeriodEnd) && (
+                          <button onClick={() => { setTaskPeriodStart(""); setTaskPeriodEnd(""); }} className="text-[10px] text-rose-400 hover:text-rose-300 transition-colors">✕ Hapus</button>
+                        )}
+                      </div>
                     </div>
                     <div className="flex gap-2 justify-end">
                       <button onClick={() => setShowTaskForm(false)} className="px-3 py-1.5 rounded-lg text-xs text-[var(--text-muted)] hover:text-white transition-colors"><X size={14} /></button>
@@ -291,6 +313,12 @@ export default function AbsensiPage() {
                               style={{ background: task.recurrenceType === "daily" ? "rgba(99,102,241,0.15)" : "rgba(245,158,11,0.15)", color: task.recurrenceType === "daily" ? "#818cf8" : "#f59e0b" }}>
                               {task.recurrenceType === "daily" ? "🔄 Harian" : `📅 ${task.scheduledDate}`}
                             </span>
+                            {task.periodStart && task.periodEnd && (
+                              <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold"
+                                style={{ background: "rgba(14,165,233,0.12)", color: "#38bdf8", border: "1px solid rgba(14,165,233,0.2)" }}>
+                                ⏱ {task.periodStart} — {task.periodEnd}
+                              </span>
+                            )}
                             {!task.isActive && <span className="text-[10px] px-2 py-0.5 rounded-full bg-rose-500/10 text-rose-400 font-semibold">Nonaktif</span>}
                           </div>
                           {task.description && <p className="text-xs text-[var(--text-muted)] mt-0.5">{task.description}</p>}
