@@ -285,6 +285,7 @@ export default function StockPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("Semua");
+  const [productTypeFilter, setProductTypeFilter] = useState("Semua");
   const [showSingleModal, setShowSingleModal] = useState(false);
   const [showBulkModal, setShowBulkModal] = useState(false);
   const [singleForm, setSingleForm] = useState({ email: "", password: "", duration: 30, productType: "mobile", maxSlots: 3 });
@@ -331,6 +332,7 @@ export default function StockPage() {
     const params = new URLSearchParams();
     if (search) params.set("search", search);
     if (statusFilter !== "Semua") params.set("status", statusFilter);
+    if (productTypeFilter !== "Semua") params.set("productType", productTypeFilter);
     params.set("page", String(pageNum));
     params.set("limit", String(limit));
 
@@ -368,7 +370,7 @@ export default function StockPage() {
         if (append) setLoadingMore(false);
         else setLoading(false);
       });
-  }, [search, statusFilter]);
+  }, [search, statusFilter, productTypeFilter]);
 
   useEffect(() => {
     setPage(1);
@@ -445,8 +447,16 @@ export default function StockPage() {
 
           {/* Card 1 — Mobile */}
           <div
-            className="glass-card p-4 flex flex-col gap-3"
-            style={{ borderColor: "rgba(34,197,94,0.25)", background: "linear-gradient(135deg,rgba(34,197,94,0.05),rgba(16,185,129,0.03))" }}
+            className="glass-card p-4 flex flex-col gap-3 cursor-pointer transition-all"
+            style={{
+              borderColor: productTypeFilter === "mobile" ? "rgba(34,197,94,0.6)" : "rgba(34,197,94,0.25)",
+              background: productTypeFilter === "mobile"
+                ? "linear-gradient(135deg,rgba(34,197,94,0.12),rgba(16,185,129,0.08))"
+                : "linear-gradient(135deg,rgba(34,197,94,0.05),rgba(16,185,129,0.03))",
+              boxShadow: productTypeFilter === "mobile" ? "0 0 0 2px rgba(34,197,94,0.2)" : undefined,
+            }}
+            onClick={() => setProductTypeFilter(productTypeFilter === "mobile" ? "Semua" : "mobile")}
+            title="Klik untuk filter Mobile"
           >
             {/* Header */}
             <div className="flex items-center justify-between">
@@ -490,8 +500,16 @@ export default function StockPage() {
 
           {/* Card 2 — Desktop */}
           <div
-            className="glass-card p-4 flex flex-col gap-3"
-            style={{ borderColor: "rgba(59,130,246,0.25)", background: "linear-gradient(135deg,rgba(59,130,246,0.05),rgba(99,102,241,0.03))" }}
+            className="glass-card p-4 flex flex-col gap-3 cursor-pointer transition-all"
+            style={{
+              borderColor: productTypeFilter === "desktop" ? "rgba(59,130,246,0.6)" : "rgba(59,130,246,0.25)",
+              background: productTypeFilter === "desktop"
+                ? "linear-gradient(135deg,rgba(59,130,246,0.12),rgba(99,102,241,0.08))"
+                : "linear-gradient(135deg,rgba(59,130,246,0.05),rgba(99,102,241,0.03))",
+              boxShadow: productTypeFilter === "desktop" ? "0 0 0 2px rgba(59,130,246,0.2)" : undefined,
+            }}
+            onClick={() => setProductTypeFilter(productTypeFilter === "desktop" ? "Semua" : "desktop")}
+            title="Klik untuk filter Desktop"
           >
             {/* Header */}
             <div className="flex items-center justify-between">
@@ -593,9 +611,30 @@ export default function StockPage() {
               <button className="btn-primary" onClick={() => setShowSingleModal(true)}><Plus size={16} /> <span className="hidden sm:inline">Tambah Akun</span></button>
             </div>
           </div>
-          {/* Row 2: Filter pills — always full width */}
+          {/* Row 2: Filter tipe produk */}
           <div className="filter-pills-scroll">
             <div className="filter-pills flex-nowrap">
+              <button
+                className={`filter-pill flex-shrink-0 flex items-center gap-1.5 ${productTypeFilter === "Semua" ? "active" : ""}`}
+                onClick={() => setProductTypeFilter("Semua")}
+              >
+                <LayoutGrid size={12} /> Semua Tipe
+              </button>
+              <button
+                className={`filter-pill flex-shrink-0 flex items-center gap-1.5 ${productTypeFilter === "mobile" ? "active" : ""}`}
+                style={productTypeFilter === "mobile" ? { background: "rgba(34,197,94,0.15)", borderColor: "rgba(34,197,94,0.4)", color: "#22c55e" } : {}}
+                onClick={() => setProductTypeFilter(productTypeFilter === "mobile" ? "Semua" : "mobile")}
+              >
+                <Smartphone size={12} /> Mobile
+              </button>
+              <button
+                className={`filter-pill flex-shrink-0 flex items-center gap-1.5 ${productTypeFilter === "desktop" ? "active" : ""}`}
+                style={productTypeFilter === "desktop" ? { background: "rgba(59,130,246,0.15)", borderColor: "rgba(59,130,246,0.4)", color: "#60a5fa" } : {}}
+                onClick={() => setProductTypeFilter(productTypeFilter === "desktop" ? "Semua" : "desktop")}
+              >
+                <Monitor size={12} /> Desktop
+              </button>
+              <div className="w-px h-4 bg-[var(--border-color)] self-center mx-1 flex-shrink-0" />
               {statusFilters.map((f) => (
                 <button key={f} className={`filter-pill flex-shrink-0 ${statusFilter === f ? "active" : ""}`} onClick={() => setStatusFilter(f)}>
                   {statusLabels[f]}
