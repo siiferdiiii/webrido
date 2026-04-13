@@ -62,15 +62,22 @@ interface StockResponse {
 const statusFilters = ["Semua", "available", "in_use", "sold"];
 const statusLabels: Record<string, string> = { Semua: "Semua", available: "Tersedia", in_use: "Digunakan", sold: "Sold" };
 
-function getStockBadge(status: string | null) {
-  switch (status) {
+function getEffectiveStatus(status: string | null, usedSlots: number | null, maxSlots: number | null) {
+  // Override: jika slot penuh tapi DB masih "in_use" (data stale)
+  if (status === "in_use" && (usedSlots ?? 0) >= (maxSlots ?? 3)) return "full";
+  return status;
+}
+
+function getStockBadge(status: string | null, usedSlots?: number | null, maxSlots?: number | null) {
+  const eff = getEffectiveStatus(status, usedSlots ?? null, maxSlots ?? null);
+  switch (eff) {
     case "available": return <span className="badge badge-success">Tersedia</span>;
     case "in_use": return <span className="badge badge-info">Digunakan</span>;
     case "sold": return <span className="badge badge-neutral">Sold</span>;
-    case "full": return <span className="badge badge-neutral">Sold</span>;
+    case "full": return <span className="badge badge-neutral">Full</span>;
     case "banned": return <span className="badge badge-danger">Banned</span>;
     case "expired": return <span className="badge badge-warning">Expired</span>;
-    default: return <span className="badge badge-neutral">{status}</span>;
+    default: return <span className="badge badge-neutral">{eff}</span>;
   }
 }
 
@@ -677,7 +684,7 @@ export default function StockPage() {
                               )}
                             </td>
                             <td className="text-[var(--text-secondary)] text-sm">{item.createdAt ? new Date(item.createdAt).toLocaleDateString("id-ID") : "—"}</td>
-                            <td className="sticky-col-body">{getStockBadge(item.status)}</td>
+                            <td className="sticky-col-body">{getStockBadge(item.status, item.usedSlots, item.maxSlots)}</td>
                             <td>
                               <button
                                 onClick={() => { setDeleteConfirm(item); setDeleteError(null); }}
@@ -709,7 +716,7 @@ export default function StockPage() {
                               {item.productType === "desktop" ? <><Monitor size={12} className="text-blue-400" />Desktop</> : <><Smartphone size={12} className="text-green-400" />Mobile</>}
                             </span>
                           </div>
-                          {getStockBadge(item.status)}
+                          {getStockBadge(item.status, item.usedSlots, item.maxSlots)}
                         </div>
                         <div className="space-y-1.5 pt-2.5 border-t border-[rgba(99,102,241,0.08)]">
                           <div className="data-card-row">
@@ -915,7 +922,7 @@ export default function StockPage() {
                 <p className="text-xs text-[var(--text-muted)] mb-1">Akun yang akan dihapus:</p>
                 <p className="font-mono text-sm text-white">{deleteConfirm.accountEmail}</p>
                 <div className="flex items-center gap-3 mt-2">
-                  {getStockBadge(deleteConfirm.status)}
+                  {getStockBadge(deleteConfirm.status, deleteConfirm.usedSlots, deleteConfirm.maxSlots)}
                   <span className="text-xs text-[var(--text-muted)]">
                     {deleteConfirm.usedSlots || 0}/{deleteConfirm.maxSlots || 3} slot terpakai
                   </span>
