@@ -51,6 +51,10 @@ interface StockResponse {
   accounts: StockItem[];
   total: number;
   statusCounts: Record<string, number>;
+  mobileStatusCounts: Record<string, number>;
+  mobileTotal: number;
+  desktopStatusCounts: Record<string, number>;
+  desktopTotal: number;
   remainingSlotsMobile: number;
   remainingSlotsDesktop: number;
 }
@@ -259,8 +263,12 @@ export default function StockPage() {
   const [accounts, setAccounts] = useState<StockItem[]>([]);
   const [total, setTotal] = useState(0);
   const [statusCounts, setStatusCounts] = useState<Record<string, number>>({ available: 0, in_use: 0, sold: 0 });
+  const [mobileStatusCounts, setMobileStatusCounts] = useState<Record<string, number>>({ available: 0, in_use: 0, sold: 0 });
+  const [mobileTotal, setMobileTotal] = useState(0);
+  const [desktopStatusCounts, setDesktopStatusCounts] = useState<Record<string, number>>({ available: 0, in_use: 0, sold: 0 });
+  const [desktopTotal, setDesktopTotal] = useState(0);
   const [remainingSlotsMobile, setRemainingSlotsMobile] = useState(0);
-  const [remainingSlotsDesktop, setRemainingsSlotsDesktop] = useState(0);
+  const [remainingSlotsDesktop, setRemainingSlotsDesktop] = useState(0);
 
   // Load More
   const [page, setPage] = useState(1);
@@ -334,8 +342,19 @@ export default function StockPage() {
         const sc: Record<string, number> = { available: 0, in_use: 0, sold: 0 };
         (json.statusCounts ? Object.entries(json.statusCounts) : []).forEach(([k, v]) => { sc[k] = v as number; });
         setStatusCounts(sc);
+
+        const msc: Record<string, number> = { available: 0, in_use: 0, sold: 0 };
+        (json.mobileStatusCounts ? Object.entries(json.mobileStatusCounts) : []).forEach(([k, v]) => { msc[k] = v as number; });
+        setMobileStatusCounts(msc);
+        setMobileTotal(json.mobileTotal ?? 0);
+
+        const dsc: Record<string, number> = { available: 0, in_use: 0, sold: 0 };
+        (json.desktopStatusCounts ? Object.entries(json.desktopStatusCounts) : []).forEach(([k, v]) => { dsc[k] = v as number; });
+        setDesktopStatusCounts(dsc);
+        setDesktopTotal(json.desktopTotal ?? 0);
+
         setRemainingSlotsMobile(json.remainingSlotsMobile ?? 0);
-        setRemainingsSlotsDesktop(json.remainingSlotsDesktop ?? 0);
+        setRemainingSlotsDesktop(json.remainingSlotsDesktop ?? 0);
       })
       .catch((err) => console.error(err))
       .finally(() => {
@@ -414,64 +433,144 @@ export default function StockPage() {
       <Topbar title="Stok Akun" subtitle="Kelola stok akun CapCut Pro (Sharing Account)" />
 
       <div className="px-4 md:px-8 pb-8 space-y-5">
-        {/* Mini Stats — Mobile */}
-        <div className="glass-card p-4 flex items-center gap-3 flex-wrap md:hidden">
-          <div className="flex items-center gap-2 flex-1 min-w-[100px]">
-            <span className="text-xs text-[var(--text-muted)]">Tersedia:</span>
-            <span className="text-base font-bold text-emerald-400">{statusCounts.available || 0}</span>
-          </div>
-          <div className="w-px h-4 bg-[var(--border-color)]" />
-          <div className="flex items-center gap-2 flex-1 min-w-[100px]">
-            <span className="text-xs text-[var(--text-muted)]">Digunakan:</span>
-            <span className="text-base font-bold text-cyan-400">{statusCounts.in_use || 0}</span>
-          </div>
-          <div className="w-px h-4 bg-[var(--border-color)]" />
-          <div className="flex items-center gap-2 flex-1 min-w-[100px]">
-            <span className="text-xs text-[var(--text-muted)]">Sold:</span>
-            <span className="text-base font-bold text-slate-400">{statusCounts.sold || 0}</span>
-          </div>
-          <div className="w-full h-px bg-[var(--border-color)]" />
-          <div className="flex items-center gap-2 flex-1 min-w-[100px]">
-            <Smartphone size={13} className="text-green-400 flex-shrink-0" />
-            <span className="text-xs text-[var(--text-muted)]">Slot Mobile:</span>
-            <span className="text-base font-bold text-green-400">{remainingSlotsMobile}</span>
-          </div>
-          <div className="w-px h-4 bg-[var(--border-color)]" />
-          <div className="flex items-center gap-2 flex-1 min-w-[100px]">
-            <Monitor size={13} className="text-blue-400 flex-shrink-0" />
-            <span className="text-xs text-[var(--text-muted)]">Slot Desktop:</span>
-            <span className="text-base font-bold text-blue-400">{remainingSlotsDesktop}</span>
-          </div>
-        </div>
+        {/* ── 3 Info Cards (Mobile, Desktop, Overall) ───────────────── */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
 
-        {/* Desktop 5-col grid */}
-        <div className="hidden md:grid grid-cols-5 gap-3 max-w-4xl">
-          <div className="glass-card p-4 text-center">
-            <p className="text-2xl font-bold text-emerald-400">{statusCounts.available || 0}</p>
-            <p className="text-xs text-[var(--text-muted)] mt-1">Tersedia</p>
-          </div>
-          <div className="glass-card p-4 text-center">
-            <p className="text-2xl font-bold text-cyan-400">{statusCounts.in_use || 0}</p>
-            <p className="text-xs text-[var(--text-muted)] mt-1">Digunakan</p>
-          </div>
-          <div className="glass-card p-4 text-center">
-            <p className="text-2xl font-bold text-slate-400">{statusCounts.sold || 0}</p>
-            <p className="text-xs text-[var(--text-muted)] mt-1">Sold</p>
-          </div>
-          <div className="glass-card p-4 text-center border border-green-500/20">
-            <div className="flex items-center justify-center gap-1.5 mb-1">
-              <Smartphone size={13} className="text-green-400" />
-              <p className="text-2xl font-bold text-green-400">{remainingSlotsMobile}</p>
+          {/* Card 1 — Mobile */}
+          <div
+            className="glass-card p-4 flex flex-col gap-3"
+            style={{ borderColor: "rgba(34,197,94,0.25)", background: "linear-gradient(135deg,rgba(34,197,94,0.05),rgba(16,185,129,0.03))" }}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-green-500/15 flex items-center justify-center flex-shrink-0">
+                  <Smartphone size={16} className="text-green-400" />
+                </div>
+                <div>
+                  <p className="text-xs font-bold text-green-400 uppercase tracking-wider">Akun Mobile</p>
+                  <p className="text-[10px] text-[var(--text-muted)]">HP / iPad / Tablet</p>
+                </div>
+              </div>
+              <span
+                className="text-xs font-bold px-2 py-0.5 rounded-lg"
+                style={{ background: "rgba(34,197,94,0.12)", color: "#22c55e" }}
+              >
+                {mobileTotal} Akun
+              </span>
             </div>
-            <p className="text-xs text-[var(--text-muted)]">Sisa Slot Mobile</p>
-          </div>
-          <div className="glass-card p-4 text-center border border-blue-500/20">
-            <div className="flex items-center justify-center gap-1.5 mb-1">
-              <Monitor size={13} className="text-blue-400" />
-              <p className="text-2xl font-bold text-blue-400">{remainingSlotsDesktop}</p>
+            {/* Stats row */}
+            <div className="grid grid-cols-3 gap-2 pt-1 border-t border-green-500/10">
+              <div className="text-center">
+                <p className="text-xl font-bold text-emerald-400">{mobileStatusCounts.available || 0}</p>
+                <p className="text-[10px] text-[var(--text-muted)] mt-0.5">Tersedia</p>
+              </div>
+              <div className="text-center border-x border-green-500/10">
+                <p className="text-xl font-bold text-cyan-400">{mobileStatusCounts.in_use || 0}</p>
+                <p className="text-[10px] text-[var(--text-muted)] mt-0.5">Digunakan</p>
+              </div>
+              <div className="text-center">
+                <p className="text-xl font-bold text-slate-400">{mobileStatusCounts.sold || 0}</p>
+                <p className="text-[10px] text-[var(--text-muted)] mt-0.5">Sold</p>
+              </div>
             </div>
-            <p className="text-xs text-[var(--text-muted)]">Sisa Slot Desktop</p>
+            {/* Slot info */}
+            <div className="flex items-center justify-between pt-1 border-t border-green-500/10">
+              <span className="text-[10px] text-[var(--text-muted)]">Sisa Slot Tersedia</span>
+              <span className="text-sm font-bold text-green-400">{remainingSlotsMobile} slot</span>
+            </div>
           </div>
+
+          {/* Card 2 — Desktop */}
+          <div
+            className="glass-card p-4 flex flex-col gap-3"
+            style={{ borderColor: "rgba(59,130,246,0.25)", background: "linear-gradient(135deg,rgba(59,130,246,0.05),rgba(99,102,241,0.03))" }}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-blue-500/15 flex items-center justify-center flex-shrink-0">
+                  <Monitor size={16} className="text-blue-400" />
+                </div>
+                <div>
+                  <p className="text-xs font-bold text-blue-400 uppercase tracking-wider">Akun Desktop</p>
+                  <p className="text-[10px] text-[var(--text-muted)]">Laptop / Mac / PC</p>
+                </div>
+              </div>
+              <span
+                className="text-xs font-bold px-2 py-0.5 rounded-lg"
+                style={{ background: "rgba(59,130,246,0.12)", color: "#60a5fa" }}
+              >
+                {desktopTotal} Akun
+              </span>
+            </div>
+            {/* Stats row */}
+            <div className="grid grid-cols-3 gap-2 pt-1 border-t border-blue-500/10">
+              <div className="text-center">
+                <p className="text-xl font-bold text-emerald-400">{desktopStatusCounts.available || 0}</p>
+                <p className="text-[10px] text-[var(--text-muted)] mt-0.5">Tersedia</p>
+              </div>
+              <div className="text-center border-x border-blue-500/10">
+                <p className="text-xl font-bold text-cyan-400">{desktopStatusCounts.in_use || 0}</p>
+                <p className="text-[10px] text-[var(--text-muted)] mt-0.5">Digunakan</p>
+              </div>
+              <div className="text-center">
+                <p className="text-xl font-bold text-slate-400">{desktopStatusCounts.sold || 0}</p>
+                <p className="text-[10px] text-[var(--text-muted)] mt-0.5">Sold</p>
+              </div>
+            </div>
+            {/* Slot info */}
+            <div className="flex items-center justify-between pt-1 border-t border-blue-500/10">
+              <span className="text-[10px] text-[var(--text-muted)]">Sisa Slot Tersedia</span>
+              <span className="text-sm font-bold text-blue-400">{remainingSlotsDesktop} slot</span>
+            </div>
+          </div>
+
+          {/* Card 3 — Overall / Keseluruhan */}
+          <div
+            className="glass-card p-4 flex flex-col gap-3"
+            style={{ borderColor: "rgba(129,140,248,0.25)", background: "linear-gradient(135deg,rgba(129,140,248,0.06),rgba(99,102,241,0.03))" }}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-indigo-500/15 flex items-center justify-center flex-shrink-0">
+                  <LayoutGrid size={16} className="text-indigo-400" />
+                </div>
+                <div>
+                  <p className="text-xs font-bold text-indigo-400 uppercase tracking-wider">Keseluruhan</p>
+                  <p className="text-[10px] text-[var(--text-muted)]">Semua tipe akun</p>
+                </div>
+              </div>
+              <span
+                className="text-xs font-bold px-2 py-0.5 rounded-lg"
+                style={{ background: "rgba(129,140,248,0.12)", color: "#818cf8" }}
+              >
+                {(statusCounts.available || 0) + (statusCounts.in_use || 0) + (statusCounts.sold || 0)} Akun
+              </span>
+            </div>
+            {/* Stats row */}
+            <div className="grid grid-cols-3 gap-2 pt-1 border-t border-indigo-500/10">
+              <div className="text-center">
+                <p className="text-xl font-bold text-emerald-400">{statusCounts.available || 0}</p>
+                <p className="text-[10px] text-[var(--text-muted)] mt-0.5">Tersedia</p>
+              </div>
+              <div className="text-center border-x border-indigo-500/10">
+                <p className="text-xl font-bold text-cyan-400">{statusCounts.in_use || 0}</p>
+                <p className="text-[10px] text-[var(--text-muted)] mt-0.5">Digunakan</p>
+              </div>
+              <div className="text-center">
+                <p className="text-xl font-bold text-slate-400">{statusCounts.sold || 0}</p>
+                <p className="text-[10px] text-[var(--text-muted)] mt-0.5">Sold</p>
+              </div>
+            </div>
+            {/* Slot total info */}
+            <div className="flex items-center justify-between pt-1 border-t border-indigo-500/10">
+              <span className="text-[10px] text-[var(--text-muted)]">Total Slot Kosong</span>
+              <span className="text-sm font-bold text-indigo-400">{remainingSlotsMobile + remainingSlotsDesktop} slot</span>
+            </div>
+          </div>
+
         </div>
 
         {/* ── Actions toolbar ─────────────────────────────────────────── */}

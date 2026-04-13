@@ -26,7 +26,7 @@ export async function GET(req: NextRequest) {
     if (status && status !== "all") where.status = status;
     if (productType && productType !== "all") where.productType = productType;
 
-    const [accounts, total, stats, mobileAccounts, desktopAccounts] = await Promise.all([
+    const [accounts, total, stats, mobileStats, desktopStats, mobileAccounts, desktopAccounts] = await Promise.all([
       prisma.stockAccount.findMany({
         where,
         include: {
@@ -47,8 +47,21 @@ export async function GET(req: NextRequest) {
         take: limit,
       }),
       prisma.stockAccount.count({ where }),
+      // Overall stats (semua tipe)
       prisma.stockAccount.groupBy({
         by: ["status"],
+        _count: true,
+      }),
+      // Stats khusus Mobile
+      prisma.stockAccount.groupBy({
+        by: ["status"],
+        where: { productType: "mobile" },
+        _count: true,
+      }),
+      // Stats khusus Desktop
+      prisma.stockAccount.groupBy({
+        by: ["status"],
+        where: { productType: "desktop" },
         _count: true,
       }),
       // Sisa slot akun mobile (available + in_use yang belum penuh)
@@ -63,12 +76,31 @@ export async function GET(req: NextRequest) {
       }),
     ]);
 
+    // Overall status counts
     const statusCounts: Record<string, number> = { available: 0, in_use: 0, sold: 0 };
     stats.forEach((s) => {
       if (s.status === "available") statusCounts.available = s._count;
       else if (s.status === "in_use") statusCounts.in_use = s._count;
       else if (s.status === "sold" || s.status === "full") statusCounts.sold = (statusCounts.sold || 0) + s._count;
     });
+
+    // Mobile status counts
+    const mobileStatusCounts: Record<string, number> = { available: 0, in_use: 0, sold: 0 };
+    mobileStats.forEach((s) => {
+      if (s.status === "available") mobileStatusCounts.available = s._count;
+      else if (s.status === "in_use") mobileStatusCounts.in_use = s._count;
+      else if (s.status === "sold" || s.status === "full") mobileStatusCounts.sold = (mobileStatusCounts.sold || 0) + s._count;
+    });
+    const mobileTotal = mobileStatusCounts.available + mobileStatusCounts.in_use + mobileStatusCounts.sold;
+
+    // Desktop status counts
+    const desktopStatusCounts: Record<string, number> = { available: 0, in_use: 0, sold: 0 };
+    desktopStats.forEach((s) => {
+      if (s.status === "available") desktopStatusCounts.available = s._count;
+      else if (s.status === "in_use") desktopStatusCounts.in_use = s._count;
+      else if (s.status === "sold" || s.status === "full") desktopStatusCounts.sold = (desktopStatusCounts.sold || 0) + s._count;
+    });
+    const desktopTotal = desktopStatusCounts.available + desktopStatusCounts.in_use + desktopStatusCounts.sold;
 
     // Hitung total sisa slot kumulatif per tipe
     const remainingSlotsMobile = mobileAccounts.reduce((sum, acc) => {
@@ -78,7 +110,13 @@ export async function GET(req: NextRequest) {
       return sum + Math.max(0, (acc.maxSlots ?? 2) - (acc.usedSlots ?? 0));
     }, 0);
 
-    return NextResponse.json({ accounts, total, page, limit, statusCounts, remainingSlotsMobile, remainingSlotsDesktop });
+    return NextResponse.json({
+      accounts, total, page, limit,
+      statusCounts,
+      mobileStatusCounts, mobileTotal,
+      desktopStatusCounts, desktopTotal,
+      remainingSlotsMobile, remainingSlotsDesktop,
+    });
   } catch (error) {
     console.error("GET /api/stock error:", error);
     return NextResponse.json({ error: "Gagal mengambil stok akun" }, { status: 500 });

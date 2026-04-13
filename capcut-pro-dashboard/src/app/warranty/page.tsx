@@ -199,7 +199,7 @@ export default function WarrantyPage() {
                     <p><span className="text-[var(--text-muted)]">Email Baru:</span> <span className="text-white">{claimResult.newAccount.email}</span></p>
                     <p><span className="text-[var(--text-muted)]">Password:</span> <span className="text-white">{claimResult.newAccount.password}</span></p>
                   </div>
-                  <p className="text-xs text-[var(--text-muted)]">Akun lama sudah otomatis di-banned. Kirim data akun baru ke pelanggan.</p>
+                  <p className="text-xs text-[var(--text-muted)]">Slot akun lama sudah dikurangi. Kirim data akun baru ke pelanggan.</p>
                 </div>
               ) : (
                 <>
@@ -208,7 +208,7 @@ export default function WarrantyPage() {
                       <AlertTriangle size={18} className="text-amber-400 mt-0.5" />
                       <div className="text-sm">
                         <p className="font-medium text-amber-300">Perhatian</p>
-                        <p className="text-[var(--text-secondary)] mt-1">Proses ini akan otomatis mengambil 1 stok akun baru, mengubah akun lama menjadi &quot;banned&quot;, dan menyiapkan akun baru untuk dikirim ke pelanggan.</p>
+                        <p className="text-[var(--text-secondary)] mt-1">Proses ini akan otomatis mengambil 1 stok akun baru, mengurangi slot akun lama, dan menyiapkan akun baru untuk dikirim ke pelanggan. Satu transaksi dapat diklaim lebih dari 1 kali.</p>
                       </div>
                     </div>
                   </div>

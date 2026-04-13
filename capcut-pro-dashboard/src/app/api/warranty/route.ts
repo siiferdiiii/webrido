@@ -96,13 +96,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Transaksi tidak ditemukan" }, { status: 404 });
     }
 
-    // FIX #2: Cek duplikat klaim — satu transaksi hanya bisa diklaim sekali
-    const existingClaim = await prisma.warrantyClaim.findFirst({
-      where: { transactionId, status: "resolved" },
+
+    // Cek jika ada klaim PENDING untuk transaksi yang sama (hindari double-submit bersamaan)
+    const pendingClaim = await prisma.warrantyClaim.findFirst({
+      where: { transactionId, status: "pending" },
     });
-    if (existingClaim) {
+    if (pendingClaim) {
       return NextResponse.json(
-        { error: "Transaksi ini sudah pernah diklaim garansi. ID klaim: " + existingClaim.id.substring(0, 8) },
+        { error: "Klaim garansi untuk transaksi ini sedang dalam proses. Harap tunggu sebentar." },
         { status: 400 }
       );
     }
