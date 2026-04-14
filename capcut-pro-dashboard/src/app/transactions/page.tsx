@@ -121,6 +121,13 @@ export default function TransactionsPage() {
   const [showDateFilter, setShowDateFilter] = useState(false);
   const [dateFilterTab, setDateFilterTab] = useState<'purchase' | 'warranty'>('purchase');
   const [showUserModal, setShowUserModal] = useState(false);
+  // Follow-up export form state (step 2 inside user modal)
+  const [exportStep, setExportStep] = useState<1 | 2>(1);
+  const [exportTitle, setExportTitle] = useState("");
+  const [exportTemplate, setExportTemplate] = useState("Halo {{nama_customer}}, kami dari Dorizz Store 😊\nMasa aktif akun CapCut Pro kamu sudah berakhir. Yuk perpanjang lagi agar tetap bisa menikmati fitur premium!\n\nInfo lebih lanjut bisa langsung chat ya 🙏");
+  const [exportDate, setExportDate] = useState("");
+  const [exportSubmitting, setExportSubmitting] = useState(false);
+  const [exportResult, setExportResult] = useState<{ ok: boolean; message: string } | null>(null);
   
   const [showModal, setShowModal] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -866,7 +873,6 @@ export default function TransactionsPage() {
         }>();
         transactions.forEach(trx => {
           if (!trx.user?.id) return;
-          // Ambil transaksi terbaru per user
           if (!userMap.has(trx.user.id)) {
             userMap.set(trx.user.id, {
               id: trx.user.id,
@@ -881,6 +887,7 @@ export default function TransactionsPage() {
           }
         });
         const users = Array.from(userMap.values());
+        const usersWithWA = users.filter(u => u.whatsapp);
 
         function openWA(phone: string | null, name: string) {
           if (!phone) return;
@@ -889,17 +896,46 @@ export default function TransactionsPage() {
           window.open(`https://wa.me/${num}?text=${msg}`, "_blank");
         }
 
-        function handleExportFollowUp() {
-          const phones = users
-            .filter(u => u.whatsapp)
-            .map(u => (u.whatsapp as string).replace(/^0/, "62").replace(/\D/g, ""));
-          // Navigate ke followup page dengan query
-          router.push(`/followup?phones=${phones.join(",")}&source=expired`);
+        function closeUserModal() {
           setShowUserModal(false);
+          setExportStep(1);
+          setExportResult(null);
+        }
+
+        async function handleCreateFollowUp() {
+          if (!exportTitle || !exportTemplate || !exportDate || usersWithWA.length === 0) return;
+          setExportSubmitting(true);
+          setExportResult(null);
+          try {
+            const recipients = usersWithWA.map(u => ({
+              whatsappNumber: (u.whatsapp as string).replace(/^0/, "62").replace(/\D/g, ""),
+              customerName: u.name,
+            }));
+            const scheduledAtWIB = exportDate.includes("+") || exportDate.endsWith("Z") ? exportDate : exportDate + ":00+07:00";
+            const res = await fetch("/api/followups", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                title: exportTitle,
+                messageTemplate: exportTemplate,
+                scheduledAt: scheduledAtWIB,
+                recipients,
+              }),
+            });
+            if (res.ok) {
+              setExportResult({ ok: true, message: `Jadwal follow-up berhasil dibuat untuk ${recipients.length} pelanggan!` });
+            } else {
+              const err = await res.json();
+              setExportResult({ ok: false, message: err.error || "Gagal membuat jadwal" });
+            }
+          } catch {
+            setExportResult({ ok: false, message: "Koneksi error" });
+          }
+          setExportSubmitting(false);
         }
 
         return (
-          <div className="modal-overlay" onClick={() => setShowUserModal(false)}>
+          <div className="modal-overlay" onClick={closeUserModal}>
             <div
               className="modal-content"
               onClick={(e) => e.stopPropagation()}
@@ -909,106 +945,201 @@ export default function TransactionsPage() {
                 <div className="flex items-center gap-2">
                   <Users size={18} className="text-[#818cf8]" />
                   <div>
-                    <h3 className="font-semibold text-white text-lg">Daftar Pelanggan</h3>
+                    <h3 className="font-semibold text-white text-lg">
+                      {exportStep === 1 ? "Daftar Pelanggan" : "Buat Jadwal Follow-Up"}
+                    </h3>
                     <p className="text-xs text-[var(--text-muted)]">
-                      {users.length} pelanggan dari hasil filter masa aktif
+                      {exportStep === 1
+                        ? `${users.length} pelanggan dari hasil filter masa aktif`
+                        : `${usersWithWA.length} penerima akan dijadwalkan`}
                     </p>
                   </div>
                 </div>
-                <button className="btn-icon" onClick={() => setShowUserModal(false)}>
+                <button className="btn-icon" onClick={closeUserModal}>
                   <X size={18} />
                 </button>
               </div>
 
-              <div className="modal-body" style={{ maxHeight: 420, overflowY: "auto", padding: 0 }}>
-                {users.length === 0 ? (
-                  <div className="py-10 flex flex-col items-center gap-2">
-                    <Users size={24} className="text-[var(--text-muted)]" />
-                    <p className="text-sm text-[var(--text-muted)]">Tidak ada data pelanggan</p>
-                  </div>
-                ) : (
-                  <div>
-                    {users.map((u, idx) => {
-                      const isExpired = u.warrantyExpiredAt && new Date(u.warrantyExpiredAt) < new Date();
-                      return (
-                        <div
-                          key={u.id}
-                          className="flex items-center gap-3 px-5 py-3.5 transition-colors hover:bg-white/3"
-                          style={{
-                            borderBottom: idx < users.length - 1 ? "1px solid rgba(255,255,255,0.04)" : undefined,
-                          }}
-                        >
-                          {/* Avatar */}
-                          <div
-                            className="w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold text-white flex-shrink-0"
-                            style={{
-                              background: isExpired
-                                ? "linear-gradient(135deg, #ef4444, #dc2626)"
-                                : "linear-gradient(135deg, #22c55e, #16a34a)",
-                            }}
-                          >
-                            {u.name?.charAt(0)?.toUpperCase() || "?"}
-                          </div>
-
-                          {/* Info */}
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-semibold text-white truncate">{u.name}</p>
-                            <p className="text-[11px] text-[var(--text-muted)] truncate">{maskEmail(u.email)}</p>
-                            <div className="flex items-center gap-3 mt-1 flex-wrap">
-                              <span className="text-[10px] text-[var(--text-muted)]">
-                                {u.productName || "CapCut Pro"}
-                              </span>
-                              <span className="text-[10px] text-[var(--text-muted)]">
-                                s/d {formatDate(u.warrantyExpiredAt)}
-                              </span>
-                              {getActiveBadge(u.warrantyExpiredAt)}
+              {/* ── STEP 1: Daftar User ── */}
+              {exportStep === 1 && (
+                <>
+                  <div className="modal-body" style={{ maxHeight: 380, overflowY: "auto", padding: 0 }}>
+                    {users.length === 0 ? (
+                      <div className="py-10 flex flex-col items-center gap-2">
+                        <Users size={24} className="text-[var(--text-muted)]" />
+                        <p className="text-sm text-[var(--text-muted)]">Tidak ada data pelanggan</p>
+                      </div>
+                    ) : (
+                      <div>
+                        {users.map((u, idx) => {
+                          const isExpired = u.warrantyExpiredAt && new Date(u.warrantyExpiredAt) < new Date();
+                          return (
+                            <div
+                              key={u.id}
+                              className="flex items-center gap-3 px-5 py-3.5 transition-colors hover:bg-white/3"
+                              style={{
+                                borderBottom: idx < users.length - 1 ? "1px solid rgba(255,255,255,0.04)" : undefined,
+                              }}
+                            >
+                              <div
+                                className="w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold text-white flex-shrink-0"
+                                style={{
+                                  background: isExpired
+                                    ? "linear-gradient(135deg, #ef4444, #dc2626)"
+                                    : "linear-gradient(135deg, #22c55e, #16a34a)",
+                                }}
+                              >
+                                {u.name?.charAt(0)?.toUpperCase() || "?"}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-semibold text-white truncate">{u.name}</p>
+                                <p className="text-[11px] text-[var(--text-muted)] truncate">{maskEmail(u.email)}</p>
+                                <div className="flex items-center gap-3 mt-1 flex-wrap">
+                                  <span className="text-[10px] text-[var(--text-muted)]">{u.productName || "CapCut Pro"}</span>
+                                  <span className="text-[10px] text-[var(--text-muted)]">s/d {formatDate(u.warrantyExpiredAt)}</span>
+                                  {getActiveBadge(u.warrantyExpiredAt)}
+                                </div>
+                              </div>
+                              <button
+                                onClick={() => openWA(u.whatsapp, u.name)}
+                                disabled={!u.whatsapp}
+                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex-shrink-0"
+                                style={{
+                                  background: u.whatsapp ? "rgba(34,197,94,0.15)" : "rgba(255,255,255,0.03)",
+                                  border: `1px solid ${u.whatsapp ? "rgba(34,197,94,0.3)" : "rgba(255,255,255,0.06)"}`,
+                                  color: u.whatsapp ? "#4ade80" : "var(--text-muted)",
+                                  cursor: u.whatsapp ? "pointer" : "not-allowed",
+                                }}
+                              >
+                                <MessageCircle size={12} />
+                                WA
+                              </button>
                             </div>
-                          </div>
-
-                          {/* WA Button */}
-                          <button
-                            onClick={() => openWA(u.whatsapp, u.name)}
-                            disabled={!u.whatsapp}
-                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex-shrink-0"
-                            style={{
-                              background: u.whatsapp ? "rgba(34,197,94,0.15)" : "rgba(255,255,255,0.03)",
-                              border: `1px solid ${u.whatsapp ? "rgba(34,197,94,0.3)" : "rgba(255,255,255,0.06)"}`,
-                              color: u.whatsapp ? "#4ade80" : "var(--text-muted)",
-                              cursor: u.whatsapp ? "pointer" : "not-allowed",
-                            }}
-                            title={u.whatsapp ? `Chat ${maskPhone(u.whatsapp)}` : "No WA"}
-                          >
-                            <MessageCircle size={12} />
-                            WA
-                          </button>
-                        </div>
-                      );
-                    })}
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
+                  {users.length > 0 && (
+                    <div className="modal-footer" style={{ justifyContent: "space-between" }}>
+                      <p className="text-xs text-[var(--text-muted)]">
+                        {users.filter(u => u.warrantyExpiredAt && new Date(u.warrantyExpiredAt) < new Date()).length} expired
+                        {" · "}
+                        {users.filter(u => u.warrantyExpiredAt && new Date(u.warrantyExpiredAt) >= new Date()).length} aktif
+                      </p>
+                      <button
+                        onClick={() => { setExportStep(2); setExportTitle(`Follow-up Expired ${new Date().toLocaleDateString("id-ID", { day: "numeric", month: "short" })}`); }}
+                        disabled={usersWithWA.length === 0}
+                        className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all"
+                        style={{
+                          background: usersWithWA.length > 0 ? "linear-gradient(135deg, #4f46e5, #6366f1)" : "rgba(255,255,255,0.05)",
+                          color: usersWithWA.length > 0 ? "white" : "var(--text-muted)",
+                          border: "none",
+                          cursor: usersWithWA.length > 0 ? "pointer" : "not-allowed",
+                        }}
+                      >
+                        <Send size={13} />
+                        Buat Jadwal Follow-Up ({usersWithWA.length})
+                      </button>
+                    </div>
+                  )}
+                </>
+              )}
 
-              {/* Footer */}
-              {users.length > 0 && (
-                <div className="modal-footer" style={{ justifyContent: "space-between" }}>
-                  <p className="text-xs text-[var(--text-muted)]">
-                    {users.filter(u => u.warrantyExpiredAt && new Date(u.warrantyExpiredAt) < new Date()).length} expired
-                    {" · "}
-                    {users.filter(u => u.warrantyExpiredAt && new Date(u.warrantyExpiredAt) >= new Date()).length} aktif
-                  </p>
-                  <button
-                    onClick={handleExportFollowUp}
-                    className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all"
-                    style={{
-                      background: "linear-gradient(135deg, #4f46e5, #6366f1)",
-                      color: "white",
-                      border: "none",
-                    }}
-                  >
-                    <ExternalLink size={13} />
-                    Export ke Follow-Up
-                  </button>
-                </div>
+              {/* ── STEP 2: Form Jadwal Follow-Up ── */}
+              {exportStep === 2 && (
+                <>
+                  <div className="modal-body space-y-4">
+                    {exportResult?.ok ? (
+                      <div className="py-6 flex flex-col items-center gap-3">
+                        <div className="w-14 h-14 rounded-full flex items-center justify-center" style={{ background: "rgba(34,197,94,0.15)" }}>
+                          <Check size={28} className="text-emerald-400" />
+                        </div>
+                        <p className="text-sm font-semibold text-emerald-300 text-center">{exportResult.message}</p>
+                        <p className="text-xs text-[var(--text-muted)] text-center">Jadwal akan diproses otomatis pada waktu yang ditentukan.</p>
+                      </div>
+                    ) : (
+                      <>
+                        {/* Judul */}
+                        <div>
+                          <label className="form-label">Judul Follow-Up</label>
+                          <input
+                            type="text"
+                            className="form-input"
+                            value={exportTitle}
+                            onChange={(e) => setExportTitle(e.target.value)}
+                            placeholder="Follow-up Akun Expired"
+                          />
+                        </div>
+
+                        {/* Template pesan */}
+                        <div>
+                          <label className="form-label">Template Pesan WA</label>
+                          <textarea
+                            className="form-input"
+                            rows={4}
+                            value={exportTemplate}
+                            onChange={(e) => setExportTemplate(e.target.value)}
+                            style={{ resize: "none" }}
+                          />
+                          <p className="text-[10px] text-[var(--text-muted)] mt-1">{"{{nama_customer}}"} → otomatis diganti nama penerima</p>
+                        </div>
+
+                        {/* Tanggal & Jam */}
+                        <div>
+                          <label className="form-label">Tanggal &amp; Jam Kirim</label>
+                          <input
+                            type="datetime-local"
+                            className="form-input"
+                            value={exportDate}
+                            onChange={(e) => setExportDate(e.target.value)}
+                          />
+                        </div>
+
+                        {/* Ringkasan penerima */}
+                        <div
+                          className="p-3 rounded-xl flex items-center gap-3"
+                          style={{ background: "rgba(99,102,241,0.08)", border: "1px solid rgba(99,102,241,0.2)" }}
+                        >
+                          <Users size={16} className="text-[#818cf8] flex-shrink-0" />
+                          <div>
+                            <p className="text-sm font-semibold text-white">{usersWithWA.length} penerima</p>
+                            <p className="text-[11px] text-[var(--text-muted)]">
+                              {usersWithWA.slice(0, 3).map(u => u.name).join(", ")}
+                              {usersWithWA.length > 3 ? `, +${usersWithWA.length - 3} lainnya` : ""}
+                            </p>
+                          </div>
+                        </div>
+
+                        {exportResult && !exportResult.ok && (
+                          <div className="p-3 rounded-xl" style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)" }}>
+                            <p className="text-sm text-rose-400">{exportResult.message}</p>
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+
+                  <div className="modal-footer">
+                    {exportResult?.ok ? (
+                      <button className="btn-primary" onClick={closeUserModal}>
+                        <Check size={14} /> Selesai
+                      </button>
+                    ) : (
+                      <>
+                        <button className="btn-secondary" onClick={() => { setExportStep(1); setExportResult(null); }}>Kembali</button>
+                        <button
+                          className="btn-primary"
+                          onClick={handleCreateFollowUp}
+                          disabled={exportSubmitting || !exportTitle || !exportTemplate || !exportDate}
+                        >
+                          {exportSubmitting ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
+                          {exportSubmitting ? "Membuat..." : `Buat Jadwal (${usersWithWA.length})`}
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </>
               )}
             </div>
           </div>
