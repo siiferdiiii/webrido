@@ -246,7 +246,7 @@ export default function Topbar({ title, subtitle, children }: TopbarProps) {
                 <button
                   onClick={() => {
                     setShowBell(false);
-                    router.push("/attendance");
+                    router.push("/absensi");
                   }}
                   className="w-full flex items-center justify-center gap-2 py-3 text-sm font-semibold text-[#818cf8] hover:bg-white/5 transition-colors"
                 >
