@@ -128,6 +128,8 @@ export default function TransactionsPage() {
   const [exportDate, setExportDate] = useState("");
   const [exportSubmitting, setExportSubmitting] = useState(false);
   const [exportResult, setExportResult] = useState<{ ok: boolean; message: string } | null>(null);
+  // Templates from settings
+  const [settingsTemplates, setSettingsTemplates] = useState<Record<string, string>>({});
   
   const [showModal, setShowModal] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -221,6 +223,13 @@ export default function TransactionsPage() {
     setHasMore(true);
     fetchData(1, false);
   }, [fetchData]);
+
+  // Fetch template settings on mount
+  useEffect(() => {
+    fetch("/api/settings").then(r => r.json()).then(d => {
+      setSettingsTemplates(d || {});
+    }).catch(() => {});
+  }, []);
 
   function handleLoadMore() {
     const next = page + 1;
@@ -1075,6 +1084,34 @@ export default function TransactionsPage() {
                         {/* Template pesan */}
                         <div>
                           <label className="form-label">Template Pesan WA</label>
+                          {/* Template picker pills */}
+                          <div className="flex flex-wrap gap-1.5 mb-2">
+                            {[
+                              { key: "template_followup", label: "📋 Follow-Up", color: "#818cf8" },
+                              { key: "template_promo", label: "🔥 Promo", color: "#f59e0b" },
+                            ].map(tp => (
+                              <button
+                                key={tp.key}
+                                type="button"
+                                onClick={() => {
+                                  const tpl = settingsTemplates[tp.key];
+                                  if (tpl) setExportTemplate(tpl.replace(/\{\{nama\}\}/g, "{{nama_customer}}"));
+                                }}
+                                className="text-[11px] px-2.5 py-1 rounded-lg transition-all hover:opacity-80"
+                                style={{ background: `${tp.color}15`, border: `1px solid ${tp.color}30`, color: tp.color }}
+                              >
+                                {tp.label}
+                              </button>
+                            ))}
+                            <button
+                              type="button"
+                              onClick={() => setExportTemplate("")}
+                              className="text-[11px] px-2.5 py-1 rounded-lg transition-all hover:opacity-80"
+                              style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", color: "var(--text-muted)" }}
+                            >
+                              ✏️ Kosongkan
+                            </button>
+                          </div>
                           <textarea
                             className="form-input"
                             rows={4}
@@ -1082,7 +1119,23 @@ export default function TransactionsPage() {
                             onChange={(e) => setExportTemplate(e.target.value)}
                             style={{ resize: "none" }}
                           />
-                          <p className="text-[10px] text-[var(--text-muted)] mt-1">{"{{nama_customer}}"} → otomatis diganti nama penerima</p>
+                          {/* Variable buttons */}
+                          <div className="flex items-center gap-2 mt-2 flex-wrap">
+                            <span className="text-[10px] text-[var(--text-muted)]">Variabel:</span>
+                            {[
+                              { v: "{{nama_customer}}", label: "Nama" },
+                            ].map(vr => (
+                              <button
+                                key={vr.v}
+                                type="button"
+                                onClick={() => setExportTemplate(exportTemplate + vr.v)}
+                                className="text-[10px] px-2 py-0.5 rounded-md transition-all hover:opacity-80"
+                                style={{ background: "rgba(139,92,246,0.12)", border: "1px solid rgba(139,92,246,0.25)", color: "#a78bfa" }}
+                              >
+                                {vr.v}
+                              </button>
+                            ))}
+                          </div>
                         </div>
 
                         {/* Tanggal & Jam */}
