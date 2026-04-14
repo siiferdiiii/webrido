@@ -74,6 +74,27 @@ function getStatusBadge(status: string | null) {
   }
 }
 
+function getActiveBadge(expiredAt: string | null) {
+  if (!expiredAt) return <span className="text-[var(--text-muted)] text-xs">-</span>;
+  const now = new Date();
+  const exp = new Date(expiredAt);
+  const isActive = exp > now;
+  const daysLeft = Math.ceil((exp.getTime() - now.getTime()) / 86400000);
+  if (isActive) {
+    return (
+      <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full" style={{ background: "rgba(34,197,94,0.12)", color: "#4ade80" }}>
+        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+        Aktif{daysLeft <= 7 ? ` (${daysLeft}h)` : ""}
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full" style={{ background: "rgba(239,68,68,0.12)", color: "#f87171" }}>
+      Expired
+    </span>
+  );
+}
+
 const sourceFilters = ["Semua", "lynkid", "manual"];
 const sourceLabels: Record<string, string> = { Semua: "Semua Sumber", lynkid: "Lynk.id", manual: "Manual" };
 
@@ -523,7 +544,7 @@ export default function TransactionsPage() {
                       color: dateFilterTab === 'warranty' ? "#f87171" : "var(--text-muted)",
                     }}
                   >
-                    <Shield size={12} /> Garansi Berakhir
+                    <Shield size={12} /> Masa Aktif Berakhir
                     {(warrantyStartDate || warrantyEndDate) && <span className="w-1.5 h-1.5 rounded-full bg-rose-400 flex-shrink-0" />}
                   </button>
                 </div>
@@ -567,7 +588,7 @@ export default function TransactionsPage() {
                 {dateFilterTab === 'warranty' && (
                   <div className="space-y-3">
                     <p className="text-xs text-[var(--text-muted)] flex items-center gap-1.5">
-                      <Shield size={11} /> Filter berdasarkan tanggal garansi berakhir
+                      <Shield size={11} /> Filter berdasarkan tanggal masa aktif akun berakhir
                     </p>
                     <div className="grid grid-cols-2 gap-3">
                       <div>
@@ -676,7 +697,7 @@ export default function TransactionsPage() {
                         <th>Produk</th>
                         <th>Nominal</th>
                         <th>Tanggal Beli</th>
-                        <th>Garansi s/d</th>
+                        <th>Aktif Sampai</th>
                         <th>Dibuat</th>
                         <th>Sumber</th>
                         <th className="sticky-col-head">Status</th>
@@ -706,7 +727,12 @@ export default function TransactionsPage() {
                             <td className="text-sm font-medium text-[#c7d2fe]">{trx.productName || <span className="text-[var(--text-muted)] italic text-xs">CapCut Pro (Default)</span>}</td>
                             <td className="font-semibold">{formatCurrency(Number(trx.amount))}</td>
                             <td className="text-[var(--text-secondary)] text-sm">{formatDateTime(trx.purchaseDate)}</td>
-                            <td className="text-sm">{formatDate(trx.warrantyExpiredAt)}</td>
+                            <td className="text-sm">
+                              <div className="flex flex-col gap-0.5">
+                                <span>{formatDate(trx.warrantyExpiredAt)}</span>
+                                {getActiveBadge(trx.warrantyExpiredAt)}
+                              </div>
+                            </td>
                             <td className="text-xs text-[var(--text-muted)]">{formatDateTime(trx.createdAt ?? null)}</td>
                             <td>{trx.isManual ? <span className="badge badge-purple">Manual</span> : <span className="badge badge-info">Lynk.id</span>}</td>
                             <td className="sticky-col-body">{getStatusBadge(trx.status)}</td>
@@ -751,8 +777,11 @@ export default function TransactionsPage() {
                             <span className="data-card-value">{formatDate(trx.purchaseDate)}</span>
                           </div>
                           <div className="data-card-row">
-                            <span className="data-card-label">Garansi s/d</span>
-                            <span className="data-card-value">{formatDate(trx.warrantyExpiredAt)}</span>
+                            <span className="data-card-label">Aktif Sampai</span>
+                            <span className="data-card-value flex items-center gap-1.5">
+                              {formatDate(trx.warrantyExpiredAt)}
+                              {getActiveBadge(trx.warrantyExpiredAt)}
+                            </span>
                           </div>
                           <div className="data-card-row">
                             <span className="data-card-label">Sumber</span>
