@@ -29,7 +29,11 @@ import {
   Filter,
   Shield,
   SlidersHorizontal,
+  Users,
+  MessageCircle,
+  ExternalLink,
 } from "lucide-react";
+import { useRouter } from "next/navigation";
 
 interface Transaction {
   id: string;
@@ -100,6 +104,7 @@ const sourceLabels: Record<string, string> = { Semua: "Semua Sumber", lynkid: "L
 
 export default function TransactionsPage() {
   const { maskEmail, maskPhone } = usePrivacy();
+  const router = useRouter();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -115,6 +120,7 @@ export default function TransactionsPage() {
   // UI state filter panel
   const [showDateFilter, setShowDateFilter] = useState(false);
   const [dateFilterTab, setDateFilterTab] = useState<'purchase' | 'warranty'>('purchase');
+  const [showUserModal, setShowUserModal] = useState(false);
   
   const [showModal, setShowModal] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -633,7 +639,26 @@ export default function TransactionsPage() {
                         onClick={() => { setWarrantyStartDate(""); setWarrantyEndDate(""); }}
                         className="flex items-center gap-1.5 text-xs text-rose-400 hover:text-rose-300 transition-colors"
                       >
-                        <X size={11} /> Reset filter garansi
+                        <X size={11} /> Reset filter
+                      </button>
+                    )}
+                    {/* Tombol Cek User — hanya muncul jika filter aktif & ada data */}
+                    {(warrantyStartDate || warrantyEndDate) && transactions.length > 0 && (
+                      <button
+                        onClick={() => setShowUserModal(true)}
+                        className="flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-semibold transition-all mt-1"
+                        style={{
+                          background: "linear-gradient(135deg, rgba(99,102,241,0.2), rgba(139,92,246,0.15))",
+                          border: "1px solid rgba(129,140,248,0.3)",
+                          color: "#a5b4fc",
+                        }}
+                      >
+                        <Users size={14} />
+                        Cek User ({(() => {
+                          const uniqueUsers = new Map<string, boolean>();
+                          transactions.forEach(t => { if (t.user?.id) uniqueUsers.set(t.user.id, true); });
+                          return uniqueUsers.size;
+                        })()} pelanggan)
                       </button>
                     )}
                   </div>
@@ -830,6 +855,165 @@ export default function TransactionsPage() {
           )}
         </div>
       </div>
+
+      {/* ── Modal Cek User (dari filter Masa Aktif) ── */}
+      {showUserModal && (() => {
+        // Deduplikasi user dari transaksi yang sudah difilter
+        const userMap = new Map<string, {
+          id: string; name: string; email: string; whatsapp: string | null;
+          productName: string | null; purchaseDate: string | null;
+          warrantyExpiredAt: string | null; amount: number;
+        }>();
+        transactions.forEach(trx => {
+          if (!trx.user?.id) return;
+          // Ambil transaksi terbaru per user
+          if (!userMap.has(trx.user.id)) {
+            userMap.set(trx.user.id, {
+              id: trx.user.id,
+              name: trx.user.name,
+              email: trx.user.email,
+              whatsapp: trx.user.whatsapp,
+              productName: trx.productName,
+              purchaseDate: trx.purchaseDate,
+              warrantyExpiredAt: trx.warrantyExpiredAt,
+              amount: trx.amount,
+            });
+          }
+        });
+        const users = Array.from(userMap.values());
+
+        function openWA(phone: string | null, name: string) {
+          if (!phone) return;
+          const num = phone.replace(/^0/, "62").replace(/\D/g, "");
+          const msg = encodeURIComponent(`Halo ${name}, kami dari Dorizz Store 😊\nMasa aktif akun CapCut Pro kamu sudah berakhir. Yuk perpanjang lagi agar tetap bisa menikmati fitur premium!\n\nInfo lebih lanjut bisa langsung chat ya 🙏`);
+          window.open(`https://wa.me/${num}?text=${msg}`, "_blank");
+        }
+
+        function handleExportFollowUp() {
+          const phones = users
+            .filter(u => u.whatsapp)
+            .map(u => (u.whatsapp as string).replace(/^0/, "62").replace(/\D/g, ""));
+          // Navigate ke followup page dengan query
+          router.push(`/followup?phones=${phones.join(",")}&source=expired`);
+          setShowUserModal(false);
+        }
+
+        return (
+          <div className="modal-overlay" onClick={() => setShowUserModal(false)}>
+            <div
+              className="modal-content"
+              onClick={(e) => e.stopPropagation()}
+              style={{ maxWidth: 640 }}
+            >
+              <div className="modal-header">
+                <div className="flex items-center gap-2">
+                  <Users size={18} className="text-[#818cf8]" />
+                  <div>
+                    <h3 className="font-semibold text-white text-lg">Daftar Pelanggan</h3>
+                    <p className="text-xs text-[var(--text-muted)]">
+                      {users.length} pelanggan dari hasil filter masa aktif
+                    </p>
+                  </div>
+                </div>
+                <button className="btn-icon" onClick={() => setShowUserModal(false)}>
+                  <X size={18} />
+                </button>
+              </div>
+
+              <div className="modal-body" style={{ maxHeight: 420, overflowY: "auto", padding: 0 }}>
+                {users.length === 0 ? (
+                  <div className="py-10 flex flex-col items-center gap-2">
+                    <Users size={24} className="text-[var(--text-muted)]" />
+                    <p className="text-sm text-[var(--text-muted)]">Tidak ada data pelanggan</p>
+                  </div>
+                ) : (
+                  <div>
+                    {users.map((u, idx) => {
+                      const isExpired = u.warrantyExpiredAt && new Date(u.warrantyExpiredAt) < new Date();
+                      return (
+                        <div
+                          key={u.id}
+                          className="flex items-center gap-3 px-5 py-3.5 transition-colors hover:bg-white/3"
+                          style={{
+                            borderBottom: idx < users.length - 1 ? "1px solid rgba(255,255,255,0.04)" : undefined,
+                          }}
+                        >
+                          {/* Avatar */}
+                          <div
+                            className="w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold text-white flex-shrink-0"
+                            style={{
+                              background: isExpired
+                                ? "linear-gradient(135deg, #ef4444, #dc2626)"
+                                : "linear-gradient(135deg, #22c55e, #16a34a)",
+                            }}
+                          >
+                            {u.name?.charAt(0)?.toUpperCase() || "?"}
+                          </div>
+
+                          {/* Info */}
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-semibold text-white truncate">{u.name}</p>
+                            <p className="text-[11px] text-[var(--text-muted)] truncate">{maskEmail(u.email)}</p>
+                            <div className="flex items-center gap-3 mt-1 flex-wrap">
+                              <span className="text-[10px] text-[var(--text-muted)]">
+                                {u.productName || "CapCut Pro"}
+                              </span>
+                              <span className="text-[10px] text-[var(--text-muted)]">
+                                s/d {formatDate(u.warrantyExpiredAt)}
+                              </span>
+                              {getActiveBadge(u.warrantyExpiredAt)}
+                            </div>
+                          </div>
+
+                          {/* WA Button */}
+                          <button
+                            onClick={() => openWA(u.whatsapp, u.name)}
+                            disabled={!u.whatsapp}
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex-shrink-0"
+                            style={{
+                              background: u.whatsapp ? "rgba(34,197,94,0.15)" : "rgba(255,255,255,0.03)",
+                              border: `1px solid ${u.whatsapp ? "rgba(34,197,94,0.3)" : "rgba(255,255,255,0.06)"}`,
+                              color: u.whatsapp ? "#4ade80" : "var(--text-muted)",
+                              cursor: u.whatsapp ? "pointer" : "not-allowed",
+                            }}
+                            title={u.whatsapp ? `Chat ${maskPhone(u.whatsapp)}` : "No WA"}
+                          >
+                            <MessageCircle size={12} />
+                            WA
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* Footer */}
+              {users.length > 0 && (
+                <div className="modal-footer" style={{ justifyContent: "space-between" }}>
+                  <p className="text-xs text-[var(--text-muted)]">
+                    {users.filter(u => u.warrantyExpiredAt && new Date(u.warrantyExpiredAt) < new Date()).length} expired
+                    {" · "}
+                    {users.filter(u => u.warrantyExpiredAt && new Date(u.warrantyExpiredAt) >= new Date()).length} aktif
+                  </p>
+                  <button
+                    onClick={handleExportFollowUp}
+                    className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all"
+                    style={{
+                      background: "linear-gradient(135deg, #4f46e5, #6366f1)",
+                      color: "white",
+                      border: "none",
+                    }}
+                  >
+                    <ExternalLink size={13} />
+                    Export ke Follow-Up
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Modal Tambah Manual */}
       {showModal && (
