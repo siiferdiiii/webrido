@@ -8,7 +8,7 @@ const CRON_SECRET = process.env.CRON_SECRET || "cron-secret-change-in-production
 
 // Helper: get current WIB time as "HH:MM"
 function getWIBTime(): string {
-  return new Date().toLocaleTimeString("id-ID", {
+  return new Date().toLocaleTimeString("en-GB", {
     timeZone: "Asia/Jakarta",
     hour: "2-digit",
     minute: "2-digit",
