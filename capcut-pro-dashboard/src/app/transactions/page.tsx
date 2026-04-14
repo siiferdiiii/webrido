@@ -26,6 +26,9 @@ import {
   Smartphone,
   Monitor,
   ChevronDown,
+  Filter,
+  Shield,
+  SlidersHorizontal,
 } from "lucide-react";
 
 interface Transaction {
@@ -82,8 +85,15 @@ export default function TransactionsPage() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("Semua");
   const [sourceFilter, setSourceFilter] = useState("Semua");
+  // Filter tanggal transaksi
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
+  // Filter garansi berakhir
+  const [warrantyStartDate, setWarrantyStartDate] = useState("");
+  const [warrantyEndDate, setWarrantyEndDate] = useState("");
+  // UI state filter panel
+  const [showDateFilter, setShowDateFilter] = useState(false);
+  const [dateFilterTab, setDateFilterTab] = useState<'purchase' | 'warranty'>('purchase');
   
   const [showModal, setShowModal] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -147,6 +157,8 @@ export default function TransactionsPage() {
     if (sourceFilter !== "Semua") params.set("source", sourceFilter);
     if (startDate) params.set("startDate", startDate);
     if (endDate) params.set("endDate", endDate);
+    if (warrantyStartDate) params.set("warrantyStart", warrantyStartDate);
+    if (warrantyEndDate) params.set("warrantyEnd", warrantyEndDate);
     params.set("page", String(pageNum));
     params.set("limit", String(limit));
 
@@ -167,7 +179,7 @@ export default function TransactionsPage() {
         if (append) setLoadingMore(false);
         else setLoading(false);
       });
-  }, [search, statusFilter, sourceFilter, startDate, endDate]);
+  }, [search, statusFilter, sourceFilter, startDate, endDate, warrantyStartDate, warrantyEndDate]);
 
   // Fresh load saat filter berubah
   useEffect(() => {
@@ -446,20 +458,169 @@ export default function TransactionsPage() {
       <Topbar title="Transaksi" subtitle="Kelola transaksi penjualan CapCut Pro" />
 
       <div className="px-4 md:px-8 pb-8 space-y-5">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        {/* ── Toolbar ── */}
+        <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
           <div className="flex flex-col gap-3 flex-1 min-w-0">
+            {/* Row 1: Search + Filter button */}
             <div className="flex flex-wrap items-center gap-3">
               <div className="search-box flex-1 min-w-[160px] max-w-xs">
                 <Search size={16} className="search-icon" />
                 <input type="text" placeholder="Cari nama, email, ID..." className="form-input !pl-10 text-sm" value={search} onChange={(e) => setSearch(e.target.value)} />
               </div>
-              <div className="flex items-center gap-2 bg-[var(--bg-card)] border border-[var(--border-color)] rounded-xl px-3 py-1.5 h-[38px] flex-shrink-0">
-                <CalendarDays size={14} className="text-[var(--text-muted)]" />
-                <input type="date" className="bg-transparent text-sm text-[var(--text-secondary)] outline-none w-[110px]" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
-                <span className="text-[var(--text-muted)] text-sm">-</span>
-                <input type="date" className="bg-transparent text-sm text-[var(--text-secondary)] outline-none w-[110px]" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
-              </div>
+              {/* Filter tanggal button dengan indikator aktif */}
+              <button
+                onClick={() => setShowDateFilter(v => !v)}
+                className="flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium transition-all flex-shrink-0"
+                style={{
+                  background: showDateFilter || startDate || endDate || warrantyStartDate || warrantyEndDate
+                    ? "rgba(129,140,248,0.15)" : "rgba(255,255,255,0.05)",
+                  border: `1px solid ${
+                    startDate || endDate || warrantyStartDate || warrantyEndDate
+                      ? "rgba(129,140,248,0.5)" : "rgba(255,255,255,0.1)"
+                  }`,
+                  color: startDate || endDate || warrantyStartDate || warrantyEndDate ? "#818cf8" : "var(--text-muted)",
+                }}
+              >
+                <SlidersHorizontal size={14} />
+                Filter Tanggal
+                {(startDate || endDate || warrantyStartDate || warrantyEndDate) && (
+                  <span
+                    className="ml-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full"
+                    style={{ background: "rgba(129,140,248,0.25)", color: "#818cf8" }}
+                  >
+                    {[startDate || endDate ? 1 : 0, warrantyStartDate || warrantyEndDate ? 1 : 0].reduce((a, b) => a + b, 0)} aktif
+                  </span>
+                )}
+              </button>
             </div>
+
+            {/* Panel filter tanggal (collapsible) */}
+            {showDateFilter && (
+              <div
+                className="rounded-2xl p-4 space-y-4"
+                style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(129,140,248,0.15)" }}
+              >
+                {/* Tab switcher */}
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setDateFilterTab('purchase')}
+                    className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all"
+                    style={{
+                      background: dateFilterTab === 'purchase' ? "rgba(99,102,241,0.2)" : "rgba(255,255,255,0.05)",
+                      border: `1px solid ${dateFilterTab === 'purchase' ? "rgba(99,102,241,0.4)" : "rgba(255,255,255,0.08)"}`,
+                      color: dateFilterTab === 'purchase' ? "#818cf8" : "var(--text-muted)",
+                    }}
+                  >
+                    <CalendarDays size={12} /> Tanggal Transaksi
+                    {(startDate || endDate) && <span className="w-1.5 h-1.5 rounded-full bg-[#818cf8] flex-shrink-0" />}
+                  </button>
+                  <button
+                    onClick={() => setDateFilterTab('warranty')}
+                    className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all"
+                    style={{
+                      background: dateFilterTab === 'warranty' ? "rgba(239,68,68,0.15)" : "rgba(255,255,255,0.05)",
+                      border: `1px solid ${dateFilterTab === 'warranty' ? "rgba(239,68,68,0.35)" : "rgba(255,255,255,0.08)"}`,
+                      color: dateFilterTab === 'warranty' ? "#f87171" : "var(--text-muted)",
+                    }}
+                  >
+                    <Shield size={12} /> Garansi Berakhir
+                    {(warrantyStartDate || warrantyEndDate) && <span className="w-1.5 h-1.5 rounded-full bg-rose-400 flex-shrink-0" />}
+                  </button>
+                </div>
+
+                {dateFilterTab === 'purchase' && (
+                  <div className="space-y-3">
+                    <p className="text-xs text-[var(--text-muted)] flex items-center gap-1.5">
+                      <CalendarDays size={11} /> Filter berdasarkan tanggal pembelian / transaksi
+                    </p>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="form-label">Dari Tanggal</label>
+                        <input
+                          type="date"
+                          className="form-input"
+                          value={startDate}
+                          onChange={(e) => setStartDate(e.target.value)}
+                        />
+                      </div>
+                      <div>
+                        <label className="form-label">Sampai Tanggal</label>
+                        <input
+                          type="date"
+                          className="form-input"
+                          value={endDate}
+                          onChange={(e) => setEndDate(e.target.value)}
+                        />
+                      </div>
+                    </div>
+                    {(startDate || endDate) && (
+                      <button
+                        onClick={() => { setStartDate(""); setEndDate(""); }}
+                        className="flex items-center gap-1.5 text-xs text-rose-400 hover:text-rose-300 transition-colors"
+                      >
+                        <X size={11} /> Reset filter transaksi
+                      </button>
+                    )}
+                  </div>
+                )}
+
+                {dateFilterTab === 'warranty' && (
+                  <div className="space-y-3">
+                    <p className="text-xs text-[var(--text-muted)] flex items-center gap-1.5">
+                      <Shield size={11} /> Filter berdasarkan tanggal garansi berakhir
+                    </p>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="form-label">Garansi Dari</label>
+                        <input
+                          type="date"
+                          className="form-input"
+                          value={warrantyStartDate}
+                          onChange={(e) => setWarrantyStartDate(e.target.value)}
+                        />
+                      </div>
+                      <div>
+                        <label className="form-label">Garansi Sampai</label>
+                        <input
+                          type="date"
+                          className="form-input"
+                          value={warrantyEndDate}
+                          onChange={(e) => setWarrantyEndDate(e.target.value)}
+                        />
+                      </div>
+                    </div>
+                    {/* Shortcut cepat */}
+                    <div className="flex flex-wrap gap-2">
+                      {[
+                        { label: "Habis hari ini", fn: () => { const d = new Date().toISOString().slice(0, 10); setWarrantyStartDate(d); setWarrantyEndDate(d); } },
+                        { label: "7 hari ke depan", fn: () => { const s = new Date().toISOString().slice(0, 10); const e = new Date(Date.now() + 7*86400000).toISOString().slice(0, 10); setWarrantyStartDate(s); setWarrantyEndDate(e); } },
+                        { label: "30 hari ke depan", fn: () => { const s = new Date().toISOString().slice(0, 10); const e = new Date(Date.now() + 30*86400000).toISOString().slice(0, 10); setWarrantyStartDate(s); setWarrantyEndDate(e); } },
+                        { label: "Sudah expired", fn: () => { setWarrantyStartDate(""); setWarrantyEndDate(new Date().toISOString().slice(0, 10)); } },
+                      ].map((sh) => (
+                        <button
+                          key={sh.label}
+                          onClick={sh.fn}
+                          className="text-[11px] px-2.5 py-1 rounded-lg transition-colors"
+                          style={{ background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.2)", color: "#f87171" }}
+                        >
+                          {sh.label}
+                        </button>
+                      ))}
+                    </div>
+                    {(warrantyStartDate || warrantyEndDate) && (
+                      <button
+                        onClick={() => { setWarrantyStartDate(""); setWarrantyEndDate(""); }}
+                        className="flex items-center gap-1.5 text-xs text-rose-400 hover:text-rose-300 transition-colors"
+                      >
+                        <X size={11} /> Reset filter garansi
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Row 2: Status + Source filter pills */}
             <div className="flex flex-wrap gap-3">
               <div className="filter-pills-scroll">
                 <div className="filter-pills flex-nowrap">

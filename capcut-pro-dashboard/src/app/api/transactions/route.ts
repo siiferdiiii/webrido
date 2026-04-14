@@ -41,17 +41,24 @@ export async function GET(req: NextRequest) {
 
     const startDate = searchParams.get("startDate");
     const endDate = searchParams.get("endDate");
+    const warrantyStart = searchParams.get("warrantyStart");
+    const warrantyEnd = searchParams.get("warrantyEnd");
     const source = searchParams.get("source");
 
+    // Filter tanggal transaksi (purchaseDate)
     if (startDate || endDate) {
-      const dateFilter: any = {};
-      if (startDate) {
-        dateFilter.gte = new Date(`${startDate}T00:00:00.000Z`);
-      }
-      if (endDate) {
-        dateFilter.lte = new Date(`${endDate}T23:59:59.999Z`);
-      }
+      const dateFilter: Record<string, Date> = {};
+      if (startDate) dateFilter.gte = new Date(`${startDate}T00:00:00.000Z`);
+      if (endDate)   dateFilter.lte = new Date(`${endDate}T23:59:59.999Z`);
       where.purchaseDate = dateFilter;
+    }
+
+    // Filter tanggal garansi berakhir (warrantyExpiredAt)
+    if (warrantyStart || warrantyEnd) {
+      const warrantyFilter: Record<string, Date> = {};
+      if (warrantyStart) warrantyFilter.gte = new Date(`${warrantyStart}T00:00:00.000Z`);
+      if (warrantyEnd)   warrantyFilter.lte = new Date(`${warrantyEnd}T23:59:59.999Z`);
+      where.warrantyExpiredAt = warrantyFilter;
     }
 
     if (source === "manual") {
