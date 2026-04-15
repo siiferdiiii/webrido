@@ -35,7 +35,10 @@ export async function middleware(req: NextRequest) {
   }
 
   // ── Affiliate Portal Routes ──────────────────────────────────────────────
-  if (pathname.startsWith("/affiliate") || pathname.startsWith("/api/affiliate-portal")) {
+  // IMPORTANT: Must NOT match /affiliates (admin page). Only match:
+  //   /affiliate (exact), /affiliate/*, /api/affiliate-portal/*
+  const isAffiliatePortal = pathname === "/affiliate" || pathname.startsWith("/affiliate/") || pathname.startsWith("/api/affiliate-portal");
+  if (isAffiliatePortal) {
     const token = req.cookies.get("affiliate_token")?.value;
 
     if (!token) {

@@ -14,7 +14,7 @@ const AUTH_PAGES = ["/login", "/register", "/affiliate/login", "/affiliate/setup
 export default function LayoutWrapper({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const isAuthPage = AUTH_PAGES.some(p => pathname === p || pathname.startsWith(p + "?"));
-  const isAffiliatePage = pathname.startsWith("/affiliate");
+  const isAffiliatePage = pathname === "/affiliate" || pathname.startsWith("/affiliate/");
 
   // Auth pages (admin login, register, affiliate login/setup) — no layout
   if (isAuthPage) {
