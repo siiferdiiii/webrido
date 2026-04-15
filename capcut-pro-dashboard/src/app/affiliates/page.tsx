@@ -18,6 +18,9 @@ import {
   ArrowDownCircle,
   ArrowUpDown,
   History,
+  Link2,
+  Copy,
+  Check,
 } from "lucide-react";
 
 interface AffiliateItem {
@@ -75,6 +78,8 @@ export default function AffiliatePage() {
   const [formData, setFormData] = useState({ name: "", email: "", whatsapp: "", commissionRate: "10" });
   const [withdrawData, setWithdrawData] = useState({ amount: "", notes: "" });
   const [submitting, setSubmitting] = useState(false);
+  const [inviteLink, setInviteLink] = useState<string | null>(null);
+  const [inviteCopied, setInviteCopied] = useState(false);
 
   // Customer picker for referral
   const [showReferralPicker, setShowReferralPicker] = useState<string | null>(null); // holds affiliate ID
@@ -276,10 +281,22 @@ export default function AffiliatePage() {
                   </td>
                   <td>
                     <div className="flex items-center justify-end gap-1">
+                      <button onClick={async () => {
+                        const res = await fetch(`/api/affiliates/${a.id}/invite`, { method: 'POST' });
+                        const data = await res.json();
+                        if (data.inviteUrl) {
+                          setInviteLink(data.inviteUrl);
+                          navigator.clipboard.writeText(data.inviteUrl);
+                          setInviteCopied(true);
+                          setTimeout(() => { setInviteCopied(false); setInviteLink(null); }, 3000);
+                        } else { alert(data.error || 'Gagal generate invite link'); }
+                      }} className="btn-icon hover:bg-[rgba(16,185,129,0.15)] hover:text-emerald-400" title="Generate Invite Link">
+                        <Link2 size={16} />
+                      </button>
                       <button onClick={() => { setShowWithdrawHistory(a); handleViewDetail(a.id); }} className="btn-icon" title="Riwayat Penarikan Saldo">
                         <History size={16} />
                       </button>
-                      <button onClick={() => handleViewDetail(a.id)} className="btn-icon hover:bg-[rgba(99,102,241,0.15)] hover:text-white" title="Lihat Detaill Pelanggan">
+                      <button onClick={() => handleViewDetail(a.id)} className="btn-icon hover:bg-[rgba(99,102,241,0.15)] hover:text-white" title="Lihat Detail Pelanggan">
                         <Eye size={16} />
                       </button>
                       <button onClick={() => { setShowWithdraw(a); setWithdrawData({ amount: "", notes: "" }); }}
@@ -523,6 +540,16 @@ export default function AffiliatePage() {
                 {submitting ? "Menyimpan..." : "Tambah Data"}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Invite Link Toast */}
+      {inviteLink && (
+        <div className="fixed bottom-6 right-6 z-50 animate-[slideUp_0.3s_ease]">
+          <div className="flex items-center gap-3 px-4 py-3 rounded-xl shadow-lg" style={{ background: 'rgba(16,185,129,0.15)', border: '1px solid rgba(16,185,129,0.3)', backdropFilter: 'blur(12px)' }}>
+            {inviteCopied ? <Check size={16} className="text-emerald-400" /> : <Copy size={16} className="text-emerald-400" />}
+            <span className="text-sm text-emerald-300">Invite link berhasil disalin!</span>
           </div>
         </div>
       )}
