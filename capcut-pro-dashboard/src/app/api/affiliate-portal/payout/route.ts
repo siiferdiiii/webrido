@@ -16,6 +16,8 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const { amount, method, accountNumber, accountName } = body;
 
+    console.log(`[Payout] Request: affiliate=${affiliate.id}, amount=${amount}, method=${method}, dest=${accountNumber}`);
+
     if (!amount || !method || !accountNumber) {
       return NextResponse.json({ error: "Jumlah, metode, dan nomor akun wajib diisi" }, { status: 400 });
     }
@@ -42,13 +44,16 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Saldo tidak mencukupi" }, { status: 400 });
     }
 
-    // Check for pending payout
-    const pendingPayout = await prisma.affiliateWithdrawal.findFirst({
-      where: { affiliateId: affiliate.id, status: "pending" },
+    // Check for pending/processing payout
+    const activePayout = await prisma.affiliateWithdrawal.findFirst({
+      where: {
+        affiliateId: affiliate.id,
+        status: { in: ["pending", "processing"] },
+      },
     });
 
-    if (pendingPayout) {
-      return NextResponse.json({ error: "Masih ada permintaan payout yang sedang diproses" }, { status: 400 });
+    if (activePayout) {
+      return NextResponse.json({ error: "Masih ada permintaan payout yang sedang diproses. Tunggu sampai selesai." }, { status: 400 });
     }
 
     // Create withdrawal record
@@ -63,6 +68,7 @@ export async function POST(req: NextRequest) {
         notes,
       },
     });
+    console.log(`[Payout] Withdrawal created: ${withdrawal.id}`);
 
     // Deduct balance immediately
     await prisma.affiliate.update({
@@ -71,11 +77,13 @@ export async function POST(req: NextRequest) {
         balance: { decrement: amount },
       },
     });
+    console.log(`[Payout] Balance deducted: -${amount}`);
 
     // ── DANA: Auto top-up via OrderKuota ────────────────────────────────
     if (method === "dana") {
       try {
         const result = await topupDANA(accountNumber, amount, withdrawal.id);
+        console.log(`[Payout] OrderKuota result: success=${result.success}, raw=${result.raw}`);
 
         if (result.success) {
           // Transaction submitted successfully, waiting for callback
@@ -87,12 +95,16 @@ export async function POST(req: NextRequest) {
             },
           });
 
+          console.log(`[Payout] ✅ DANA top-up submitted, withdrawal=${withdrawal.id}`);
+
           return NextResponse.json({
             success: true,
             message: "Top up DANA sedang diproses. Saldo akan masuk dalam beberapa menit.",
             withdrawal: { ...withdrawal, status: "processing" },
           });
         } else {
+          console.log(`[Payout] ❌ OrderKuota failed: ${result.error || result.raw}`);
+
           // API call failed — refund balance, mark as rejected
           await prisma.affiliate.update({
             where: { id: affiliate.id },
@@ -103,7 +115,7 @@ export async function POST(req: NextRequest) {
             where: { id: withdrawal.id },
             data: {
               status: "rejected",
-              notes: notes + ` | Gagal: ${result.error || result.raw || "Unknown error"}`,
+              notes: notes + ` | Gagal: ${(result.error || result.raw || "Unknown error").substring(0, 200)}`,
               processedAt: new Date(),
             },
           });
@@ -113,20 +125,26 @@ export async function POST(req: NextRequest) {
           }, { status: 500 });
         }
       } catch (apiError) {
-        // Exception — refund balance
-        await prisma.affiliate.update({
-          where: { id: affiliate.id },
-          data: { balance: { increment: amount } },
-        });
+        console.error(`[Payout] ❌ Exception:`, apiError);
 
-        await prisma.affiliateWithdrawal.update({
-          where: { id: withdrawal.id },
-          data: {
-            status: "rejected",
-            notes: notes + ` | Error: ${String(apiError)}`,
-            processedAt: new Date(),
-          },
-        });
+        // Exception — refund balance
+        try {
+          await prisma.affiliate.update({
+            where: { id: affiliate.id },
+            data: { balance: { increment: amount } },
+          });
+
+          await prisma.affiliateWithdrawal.update({
+            where: { id: withdrawal.id },
+            data: {
+              status: "rejected",
+              notes: notes + ` | Error: ${String(apiError).substring(0, 200)}`,
+              processedAt: new Date(),
+            },
+          });
+        } catch (refundErr) {
+          console.error(`[Payout] ❌ Refund also failed:`, refundErr);
+        }
 
         return NextResponse.json({
           error: "Terjadi kesalahan saat memproses. Saldo telah dikembalikan.",
@@ -141,6 +159,7 @@ export async function POST(req: NextRequest) {
       withdrawal,
     });
   } catch (error) {
+    console.error(`[Payout] ❌ Unhandled error:`, error);
     return NextResponse.json({ error: String(error) }, { status: 500 });
   }
 }
