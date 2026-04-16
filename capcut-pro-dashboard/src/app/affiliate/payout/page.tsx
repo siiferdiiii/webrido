@@ -24,7 +24,9 @@ interface Withdrawal {
   processedAt: string | null;
 }
 
-const MIN_PAYOUT = 25000;
+const MIN_PAYOUT = 10000;
+const MAX_PAYOUT = 1000000;
+const QUICK_AMOUNTS = [10000, 20000, 30000, 50000, 100000];
 
 export default function AffiliatePayoutPage() {
   const { user, refetch } = useAffiliateAuth();
@@ -64,6 +66,10 @@ export default function AffiliatePayoutPage() {
     const amountNum = parseFloat(amount);
     if (!amountNum || amountNum < MIN_PAYOUT) {
       setError(`Minimum payout Rp ${fmt(MIN_PAYOUT)}`);
+      return;
+    }
+    if (amountNum > MAX_PAYOUT) {
+      setError(`Maksimum payout Rp ${fmt(MAX_PAYOUT)}`);
       return;
     }
     if (!accountNumber) {
@@ -217,22 +223,43 @@ export default function AffiliatePayoutPage() {
                 {/* Amount */}
                 <div>
                   <label className="form-label">Jumlah (Rp)</label>
+
+                  {/* Quick amount buttons */}
+                  <div className="flex flex-wrap gap-1.5 mb-2">
+                    {QUICK_AMOUNTS.map(q => (
+                      <button
+                        key={q}
+                        type="button"
+                        onClick={() => setAmount(q.toString())}
+                        disabled={q > balance}
+                        className={`px-2.5 py-1.5 rounded-lg text-[11px] sm:text-xs font-semibold transition-all cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed ${
+                          parseFloat(amount) === q
+                            ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/40"
+                            : "bg-[var(--bg-secondary)] text-[var(--text-secondary)] border-[var(--border-color)] hover:text-white hover:border-white/20"
+                        }`}
+                        style={{ border: "1px solid" }}
+                      >
+                        {fmt(q)}
+                      </button>
+                    ))}
+                  </div>
+
                   <input
                     type="number"
                     className="form-input"
-                    placeholder={`Min. ${fmt(MIN_PAYOUT)}`}
+                    placeholder={`Min. ${fmt(MIN_PAYOUT)} — Maks. ${fmt(MAX_PAYOUT)}`}
                     value={amount}
                     onChange={e => setAmount(e.target.value)}
                     min={MIN_PAYOUT}
-                    max={balance}
+                    max={Math.min(balance, MAX_PAYOUT)}
                   />
                   {balance >= MIN_PAYOUT && (
                     <button
                       type="button"
-                      onClick={() => setAmount(balance.toString())}
+                      onClick={() => setAmount(Math.min(balance, MAX_PAYOUT).toString())}
                       className="text-xs text-emerald-400 hover:underline mt-1 cursor-pointer"
                     >
-                      Tarik semua (Rp {fmt(balance)})
+                      Tarik maks (Rp {fmt(Math.min(balance, MAX_PAYOUT))})
                     </button>
                   )}
                 </div>

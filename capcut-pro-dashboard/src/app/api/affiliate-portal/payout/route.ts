@@ -3,7 +3,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireAffiliate } from "@/lib/affiliate-auth";
 import { topupDANA } from "@/lib/orderkuota";
 
-const MIN_PAYOUT = 25000; // Minimum Rp 25.000
+const MIN_PAYOUT = 10000; // Minimum Rp 10.000
+const MAX_PAYOUT = 1000000; // Maksimum Rp 1.000.000
 
 // POST /api/affiliate-portal/payout — Request payout
 export async function POST(req: NextRequest) {
@@ -21,6 +22,10 @@ export async function POST(req: NextRequest) {
 
     if (amount < MIN_PAYOUT) {
       return NextResponse.json({ error: `Minimum payout Rp ${MIN_PAYOUT.toLocaleString("id-ID")}` }, { status: 400 });
+    }
+
+    if (amount > MAX_PAYOUT) {
+      return NextResponse.json({ error: `Maksimum payout Rp ${MAX_PAYOUT.toLocaleString("id-ID")}` }, { status: 400 });
     }
 
     if (!["dana", "bank_transfer"].includes(method)) {
