@@ -94,11 +94,38 @@ export async function topupDANA(
         raw: text,
       };
     } catch {
-      // Response might not be JSON, handle raw text
-      const isSuccess = text.toLowerCase().includes("sukses") || text.toLowerCase().includes("success");
+      // Response is NOT JSON — parse raw text
+      // OkeConnect returns formats like:
+      //   Success: "R#ddddc221-1845-4a1b-9bc5-04eb8b8ad4cd BB..."  (has R# + reference ID)
+      //   Success: contains "sukses" / "success" / "berhasil"
+      //   Failure: contains "gagal" / "error" / "saldo tidak" / "produk tidak"
+      const lower = text.toLowerCase();
+
+      // Explicit failure keywords
+      const isExplicitFail =
+        lower.includes("gagal") ||
+        lower.includes("failed") ||
+        lower.includes("error") ||
+        lower.includes("saldo tidak") ||
+        lower.includes("produk tidak") ||
+        lower.includes("nomor tidak valid") ||
+        lower.includes("tidak ditemukan") ||
+        lower.includes("ditolak");
+
+      // Success indicators
+      const hasRefId = text.includes("R#") || /[0-9a-f]{8}-[0-9a-f]{4}/.test(text);
+      const hasSuccessKeyword = lower.includes("sukses") || lower.includes("success") || lower.includes("berhasil");
+      const isSuccess = !isExplicitFail && (hasRefId || hasSuccessKeyword);
+
+      // Extract transaction ID from R# format
+      const refMatch = text.match(/R#([\w-]+)/);
+      const trxId = refMatch ? refMatch[1] : undefined;
+
+      console.log(`[OrderKuota] Parsed: isSuccess=${isSuccess}, isExplicitFail=${isExplicitFail}, hasRefId=${hasRefId}, trxId=${trxId}`);
 
       return {
         success: isSuccess,
+        data: trxId ? { trxid: trxId } : undefined,
         raw: text,
         error: isSuccess ? undefined : text,
       };
