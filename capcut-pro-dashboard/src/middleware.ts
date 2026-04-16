@@ -9,6 +9,7 @@ const PUBLIC_PATHS = [
   "/api/auth/register",
   "/api/auth/me",
   "/api/webhook",
+  "/api/webhook/orderkuota",
   "/api/cron",
   // Affiliate public paths
   "/affiliate/login",

@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/db";
 import { NextRequest, NextResponse } from "next/server";
 import { requireAffiliate } from "@/lib/affiliate-auth";
+import { topupDANA } from "@/lib/orderkuota";
 
 const MIN_PAYOUT = 25000; // Minimum Rp 25.000
 
@@ -66,40 +67,72 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    // TODO: Integrate with OrderKuota API for automatic payout
-    // For now, withdrawal is created as 'pending' and admin will process it
-    // When OrderKuota API integration is ready, uncomment below:
-    /*
-    try {
-      const orderkuotaResult = await callOrderKuotaAPI({
-        method,
-        amount,
-        accountNumber,
-        accountName,
-      });
-      
-      if (orderkuotaResult.success) {
+    // ── DANA: Auto top-up via OrderKuota ────────────────────────────────
+    if (method === "dana") {
+      try {
+        const result = await topupDANA(accountNumber, amount, withdrawal.id);
+
+        if (result.success) {
+          // Transaction submitted successfully, waiting for callback
+          await prisma.affiliateWithdrawal.update({
+            where: { id: withdrawal.id },
+            data: {
+              status: "processing",
+              notes: notes + ` | OrderKuota: ${result.data?.trxid || "submitted"}`,
+            },
+          });
+
+          return NextResponse.json({
+            success: true,
+            message: "Top up DANA sedang diproses. Saldo akan masuk dalam beberapa menit.",
+            withdrawal: { ...withdrawal, status: "processing" },
+          });
+        } else {
+          // API call failed — refund balance, mark as rejected
+          await prisma.affiliate.update({
+            where: { id: affiliate.id },
+            data: { balance: { increment: amount } },
+          });
+
+          await prisma.affiliateWithdrawal.update({
+            where: { id: withdrawal.id },
+            data: {
+              status: "rejected",
+              notes: notes + ` | Gagal: ${result.error || result.raw || "Unknown error"}`,
+              processedAt: new Date(),
+            },
+          });
+
+          return NextResponse.json({
+            error: "Gagal memproses top up DANA. Saldo telah dikembalikan.",
+          }, { status: 500 });
+        }
+      } catch (apiError) {
+        // Exception — refund balance
+        await prisma.affiliate.update({
+          where: { id: affiliate.id },
+          data: { balance: { increment: amount } },
+        });
+
         await prisma.affiliateWithdrawal.update({
           where: { id: withdrawal.id },
-          data: { status: "approved", processedAt: new Date() },
+          data: {
+            status: "rejected",
+            notes: notes + ` | Error: ${String(apiError)}`,
+            processedAt: new Date(),
+          },
         });
-      }
-    } catch (apiError) {
-      // Refund balance if API fails
-      await prisma.affiliate.update({
-        where: { id: affiliate.id },
-        data: { balance: { increment: amount } },
-      });
-      await prisma.affiliateWithdrawal.update({
-        where: { id: withdrawal.id },
-        data: { status: "rejected", notes: notes + " | API Error: " + String(apiError) },
-      });
-    }
-    */
 
+        return NextResponse.json({
+          error: "Terjadi kesalahan saat memproses. Saldo telah dikembalikan.",
+        }, { status: 500 });
+      }
+    }
+
+    // ── Bank Transfer: Manual (admin will process) ──────────────────────
     return NextResponse.json({
       success: true,
-      message: "Permintaan payout berhasil. Akan diproses dalam 1x24 jam.",
+      message: "Permintaan transfer bank berhasil. Akan diproses admin dalam 1x24 jam.",
       withdrawal,
     });
   } catch (error) {

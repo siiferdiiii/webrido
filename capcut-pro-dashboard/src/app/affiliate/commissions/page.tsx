@@ -36,46 +36,45 @@ export default function AffiliateCommissionsPage() {
 
   useEffect(() => { fetchCommissions(); }, [fetchCommissions]);
 
-  // Calculate totals
   const totalEarned = commissions.reduce((sum, c) => sum + Number(c.amount), 0);
 
   return (
     <div>
-      <div className="px-8 pt-8 pb-2">
-        <h1 className="text-2xl font-bold text-white">Riwayat Komisi</h1>
-        <p className="text-sm text-[var(--text-muted)] mt-1">
-          Detail komisi dari setiap transaksi referral ({total} total)
+      <div className="px-4 sm:px-8 pt-6 sm:pt-8 pb-2">
+        <h1 className="text-xl sm:text-2xl font-bold text-white">Riwayat Komisi</h1>
+        <p className="text-xs sm:text-sm text-[var(--text-muted)] mt-1">
+          Detail komisi dari transaksi referral ({total} total)
         </p>
       </div>
 
-      <div className="px-8 pb-8 space-y-5">
+      <div className="px-4 sm:px-8 pb-8 space-y-4 sm:space-y-5">
         {/* Summary */}
-        <div className="grid grid-cols-2 gap-4 max-w-md">
-          <div className="glass-card p-4 text-center">
-            <p className="text-xl font-bold text-emerald-400">Rp {fmt(totalEarned)}</p>
-            <p className="text-[10px] text-[var(--text-muted)] mt-1">Total di halaman ini</p>
+        <div className="grid grid-cols-2 gap-3 max-w-xs sm:max-w-md">
+          <div className="glass-card p-3 sm:p-4 text-center">
+            <p className="text-lg sm:text-xl font-bold text-emerald-400">Rp {fmt(totalEarned)}</p>
+            <p className="text-[10px] text-[var(--text-muted)] mt-1">Di halaman ini</p>
           </div>
-          <div className="glass-card p-4 text-center">
-            <p className="text-xl font-bold text-amber-400">{total}</p>
+          <div className="glass-card p-3 sm:p-4 text-center">
+            <p className="text-lg sm:text-xl font-bold text-amber-400">{total}</p>
             <p className="text-[10px] text-[var(--text-muted)] mt-1">Total komisi</p>
           </div>
         </div>
 
-        {/* Table */}
+        {/* Table / Cards */}
         <div className="glass-card overflow-hidden">
           {loading ? (
-            <div className="flex items-center justify-center py-20">
-              <Loader2 className="animate-spin text-emerald-400" size={32} />
+            <div className="flex items-center justify-center py-16 sm:py-20">
+              <Loader2 className="animate-spin text-emerald-400" size={28} />
             </div>
           ) : commissions.length === 0 ? (
-            <div className="text-center py-16">
-              <Coins size={48} className="mx-auto mb-4 text-[var(--text-muted)]" />
-              <p className="text-[var(--text-secondary)]">Belum ada riwayat komisi</p>
+            <div className="text-center py-12 sm:py-16">
+              <Coins size={40} className="mx-auto mb-3 text-[var(--text-muted)]" />
+              <p className="text-sm text-[var(--text-secondary)]">Belum ada riwayat komisi</p>
             </div>
           ) : (
             <>
               {/* Desktop Table */}
-              <div className="hidden sm:block overflow-x-auto">
+              <div className="hidden md:block overflow-x-auto">
                 <table className="data-table">
                   <thead>
                     <tr>
@@ -107,27 +106,27 @@ export default function AffiliateCommissionsPage() {
               </div>
 
               {/* Mobile Cards */}
-              <div className="sm:hidden data-card-grid">
+              <div className="md:hidden divide-y divide-[rgba(99,102,241,0.06)]">
                 {commissions.map(c => (
-                  <div key={c.id} className="data-card">
-                    <div className="flex items-center justify-between mb-2">
-                      <p className="text-sm font-semibold text-white">{c.user?.name || "—"}</p>
-                      <span className="text-sm font-bold text-emerald-400">+Rp {fmt(Number(c.amount))}</span>
+                  <div key={c.id} className="px-4 py-3.5 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div className="min-w-0 pr-2">
+                        <p className="text-sm font-semibold text-white truncate">{c.user?.name || "—"}</p>
+                        <p className="text-[11px] text-[var(--text-muted)] truncate">
+                          {c.transaction?.productName || "Transaksi"}
+                        </p>
+                      </div>
+                      <span className="text-sm font-bold text-emerald-400 flex-shrink-0">+Rp {fmt(Number(c.amount))}</span>
                     </div>
-                    <div className="data-card-row">
-                      <span className="data-card-label">Produk</span>
-                      <span className="data-card-value text-[var(--text-secondary)]">{c.transaction?.productName || "—"}</span>
-                    </div>
-                    <div className="data-card-row">
-                      <span className="data-card-label">Nilai Trx</span>
-                      <span className="data-card-value">Rp {fmt(Number(c.transactionAmount))}</span>
-                    </div>
-                    <div className="data-card-row">
-                      <span className="data-card-label">Tanggal</span>
-                      <span className="data-card-value">{new Date(c.createdAt).toLocaleDateString("id-ID")}</span>
-                    </div>
-                    <div className="data-card-row">
-                      <span className="data-card-label">Status</span>
+                    <div className="flex items-center justify-between text-xs">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[var(--text-muted)]">
+                          {new Date(c.createdAt).toLocaleDateString("id-ID")}
+                        </span>
+                        <span className="text-[var(--text-muted)]">
+                          Trx: Rp {fmt(Number(c.transactionAmount))}
+                        </span>
+                      </div>
                       <span className={`badge text-[10px] ${c.status === "credited" ? "badge-success" : "badge-neutral"}`}>
                         {c.status === "credited" ? "Dikreditkan" : c.status}
                       </span>
@@ -138,11 +137,11 @@ export default function AffiliateCommissionsPage() {
 
               {/* Pagination */}
               {totalPages > 1 && (
-                <div className="flex items-center justify-center gap-2 p-4 border-t border-[var(--border-color)]">
+                <div className="flex items-center justify-center gap-2 p-3 sm:p-4 border-t border-[var(--border-color)]">
                   <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page <= 1} className="btn-icon">
                     <ChevronLeft size={16} />
                   </button>
-                  <span className="text-sm text-[var(--text-secondary)]">
+                  <span className="text-xs sm:text-sm text-[var(--text-secondary)]">
                     Halaman {page} dari {totalPages}
                   </span>
                   <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page >= totalPages} className="btn-icon">

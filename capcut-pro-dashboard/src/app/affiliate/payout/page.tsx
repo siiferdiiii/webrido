@@ -87,8 +87,8 @@ export default function AffiliatePayoutPage() {
       setAmount("");
       setAccountNumber("");
       setAccountName("");
-      refetch(); // Refresh balance
-      fetchWithdrawals(); // Refresh history
+      refetch();
+      fetchWithdrawals();
     } catch {
       setError("Terjadi kesalahan. Coba lagi.");
     } finally {
@@ -96,65 +96,66 @@ export default function AffiliatePayoutPage() {
     }
   };
 
-  const hasPending = withdrawals.some(w => w.status === "pending");
+  const hasPending = withdrawals.some(w => w.status === "pending" || w.status === "processing");
   const balance = Number(user?.balance || 0);
 
   const statusIcon = (status: string) => {
     if (status === "approved") return <CheckCircle size={14} className="text-emerald-400" />;
-    if (status === "pending") return <Clock size={14} className="text-amber-400" />;
+    if (status === "pending" || status === "processing") return <Clock size={14} className="text-amber-400 animate-pulse" />;
     if (status === "rejected") return <XCircle size={14} className="text-rose-400" />;
     return <Clock size={14} className="text-[var(--text-muted)]" />;
   };
 
   const statusBadge = (status: string) => {
     if (status === "approved") return "badge-success";
-    if (status === "pending") return "badge-warning";
+    if (status === "pending" || status === "processing") return "badge-warning";
     if (status === "rejected") return "badge-danger";
     return "badge-neutral";
   };
 
   const statusLabel = (status: string) => {
     if (status === "approved") return "Berhasil";
-    if (status === "pending") return "Diproses";
+    if (status === "processing") return "Top Up...";
+    if (status === "pending") return "Menunggu";
     if (status === "rejected") return "Ditolak";
     return status;
   };
 
   return (
     <div>
-      <div className="px-8 pt-8 pb-2">
-        <h1 className="text-2xl font-bold text-white">Tarik Saldo</h1>
-        <p className="text-sm text-[var(--text-muted)] mt-1">
+      <div className="px-4 sm:px-8 pt-6 sm:pt-8 pb-2">
+        <h1 className="text-xl sm:text-2xl font-bold text-white">Tarik Saldo</h1>
+        <p className="text-xs sm:text-sm text-[var(--text-muted)] mt-1">
           Request payout ke DANA atau Transfer Bank
         </p>
       </div>
 
-      <div className="px-8 pb-8 space-y-6">
-        <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+      <div className="px-4 sm:px-8 pb-8 space-y-5 sm:space-y-6">
+        <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 sm:gap-6">
           {/* Payout Form */}
           <div className="lg:col-span-2">
-            <div className="glass-card p-6 space-y-5">
+            <div className="glass-card p-4 sm:p-6 space-y-4 sm:space-y-5">
               {/* Balance display */}
               <div
-                className="p-4 rounded-xl text-center"
+                className="p-3 sm:p-4 rounded-xl text-center"
                 style={{
                   background: "linear-gradient(135deg, rgba(16,185,129,0.12), rgba(5,150,105,0.08))",
                   border: "1px solid rgba(16,185,129,0.25)",
                 }}
               >
-                <p className="text-xs text-emerald-400/70 uppercase tracking-wider font-semibold">Saldo Tersedia</p>
-                <p className="text-3xl font-bold text-emerald-400 mt-1">Rp {fmt(balance)}</p>
+                <p className="text-[10px] sm:text-xs text-emerald-400/70 uppercase tracking-wider font-semibold">Saldo Tersedia</p>
+                <p className="text-2xl sm:text-3xl font-bold text-emerald-400 mt-1">Rp {fmt(balance)}</p>
                 <p className="text-[10px] text-[var(--text-muted)] mt-2">Min. payout Rp {fmt(MIN_PAYOUT)}</p>
               </div>
 
               {hasPending && (
                 <div className="flex items-start gap-2 p-3 rounded-xl text-xs" style={{ background: "rgba(245,158,11,0.1)", border: "1px solid rgba(245,158,11,0.2)" }}>
                   <AlertTriangle size={14} className="text-amber-400 flex-shrink-0 mt-0.5" />
-                  <span className="text-amber-300">Ada payout yang masih diproses. Tunggu sampai selesai sebelum request lagi.</span>
+                  <span className="text-amber-300">Ada payout yang masih diproses. Tunggu sampai selesai.</span>
                 </div>
               )}
 
-              <form onSubmit={handlePayout} className="space-y-4">
+              <form onSubmit={handlePayout} className="space-y-3 sm:space-y-4">
                 {/* Method */}
                 <div>
                   <label className="form-label">Metode Pembayaran</label>
@@ -162,7 +163,7 @@ export default function AffiliatePayoutPage() {
                     <button
                       type="button"
                       onClick={() => setMethod("dana")}
-                      className={`p-3 rounded-xl text-sm font-medium transition-all text-center cursor-pointer ${
+                      className={`p-2.5 sm:p-3 rounded-xl text-xs sm:text-sm font-medium transition-all text-center cursor-pointer ${
                         method === "dana"
                           ? "bg-[rgba(0,112,255,0.15)] border-[rgba(0,112,255,0.4)] text-blue-400"
                           : "bg-[var(--bg-secondary)] border-[var(--border-color)] text-[var(--text-secondary)]"
@@ -174,14 +175,14 @@ export default function AffiliatePayoutPage() {
                     <button
                       type="button"
                       onClick={() => setMethod("bank_transfer")}
-                      className={`p-3 rounded-xl text-sm font-medium transition-all text-center cursor-pointer ${
+                      className={`p-2.5 sm:p-3 rounded-xl text-xs sm:text-sm font-medium transition-all text-center cursor-pointer ${
                         method === "bank_transfer"
                           ? "bg-[rgba(16,185,129,0.15)] border-[rgba(16,185,129,0.4)] text-emerald-400"
                           : "bg-[var(--bg-secondary)] border-[var(--border-color)] text-[var(--text-secondary)]"
                       }`}
                       style={{ border: "1px solid" }}
                     >
-                      🏦 Transfer Bank
+                      🏦 Bank
                     </button>
                   </div>
                 </div>
@@ -200,10 +201,9 @@ export default function AffiliatePayoutPage() {
                   />
                 </div>
 
-                {/* Account Name (for bank) */}
                 {method === "bank_transfer" && (
                   <div>
-                    <label className="form-label">Nama Pemilik Rekening & Bank</label>
+                    <label className="form-label">Nama & Bank</label>
                     <input
                       type="text"
                       className="form-input"
@@ -238,12 +238,12 @@ export default function AffiliatePayoutPage() {
                 </div>
 
                 {error && (
-                  <div className="px-3 py-2 rounded-xl text-sm text-rose-300" style={{ background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.2)" }}>
+                  <div className="px-3 py-2 rounded-xl text-xs sm:text-sm text-rose-300" style={{ background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.2)" }}>
                     {error}
                   </div>
                 )}
                 {success && (
-                  <div className="px-3 py-2 rounded-xl text-sm text-emerald-300" style={{ background: "rgba(16,185,129,0.1)", border: "1px solid rgba(16,185,129,0.2)" }}>
+                  <div className="px-3 py-2 rounded-xl text-xs sm:text-sm text-emerald-300" style={{ background: "rgba(16,185,129,0.1)", border: "1px solid rgba(16,185,129,0.2)" }}>
                     {success}
                   </div>
                 )}
@@ -251,7 +251,7 @@ export default function AffiliatePayoutPage() {
                 <button
                   type="submit"
                   disabled={submitting || hasPending || balance < MIN_PAYOUT}
-                  className="w-full flex items-center justify-center gap-2 py-3 rounded-xl font-semibold text-white transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="w-full flex items-center justify-center gap-2 py-2.5 sm:py-3 rounded-xl font-semibold text-white text-sm transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                   style={{ background: "linear-gradient(135deg, #10b981, #059669)", boxShadow: "0 4px 20px rgba(16,185,129,0.3)" }}
                 >
                   {submitting ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} />}
@@ -264,7 +264,7 @@ export default function AffiliatePayoutPage() {
           {/* Withdrawal History */}
           <div className="lg:col-span-3">
             <div className="glass-card overflow-hidden">
-              <div className="px-6 py-4 border-b border-[var(--border-color)]">
+              <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-[var(--border-color)]">
                 <h3 className="text-sm font-semibold text-white flex items-center gap-2">
                   <Banknote size={16} className="text-emerald-400" />
                   Riwayat Penarikan
@@ -272,30 +272,30 @@ export default function AffiliatePayoutPage() {
               </div>
 
               {loading ? (
-                <div className="flex items-center justify-center py-16">
+                <div className="flex items-center justify-center py-12 sm:py-16">
                   <Loader2 className="animate-spin text-emerald-400" size={28} />
                 </div>
               ) : withdrawals.length === 0 ? (
-                <div className="text-center py-16">
-                  <Wallet size={40} className="mx-auto mb-3 text-[var(--text-muted)]" />
+                <div className="text-center py-12 sm:py-16">
+                  <Wallet size={36} className="mx-auto mb-3 text-[var(--text-muted)]" />
                   <p className="text-sm text-[var(--text-muted)]">Belum ada riwayat penarikan</p>
                 </div>
               ) : (
                 <>
                   <div className="divide-y divide-[rgba(99,102,241,0.06)]">
                     {withdrawals.map(w => (
-                      <div key={w.id} className="flex items-center justify-between px-6 py-4 hover:bg-[rgba(16,185,129,0.03)] transition-colors">
-                        <div className="flex items-start gap-3">
-                          {statusIcon(w.status)}
-                          <div>
-                            <p className="text-sm font-semibold text-rose-400">-Rp {fmt(Number(w.amount))}</p>
-                            <p className="text-xs text-[var(--text-muted)] mt-0.5">{w.notes || "Tanpa catatan"}</p>
+                      <div key={w.id} className="flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 hover:bg-[rgba(16,185,129,0.03)] transition-colors">
+                        <div className="flex items-start gap-2 sm:gap-3 min-w-0">
+                          <div className="flex-shrink-0 mt-0.5">{statusIcon(w.status)}</div>
+                          <div className="min-w-0">
+                            <p className="text-xs sm:text-sm font-semibold text-rose-400">-Rp {fmt(Number(w.amount))}</p>
+                            <p className="text-[10px] sm:text-xs text-[var(--text-muted)] mt-0.5 truncate">{w.notes || "Tanpa catatan"}</p>
                             <p className="text-[10px] text-[var(--text-muted)] mt-0.5 font-mono">
-                              {new Date(w.createdAt).toLocaleDateString("id-ID")} • {new Date(w.createdAt).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })}
+                              {new Date(w.createdAt).toLocaleDateString("id-ID")}
                             </p>
                           </div>
                         </div>
-                        <span className={`badge text-[10px] ${statusBadge(w.status)}`}>
+                        <span className={`badge text-[10px] flex-shrink-0 ml-2 ${statusBadge(w.status)}`}>
                           {statusLabel(w.status)}
                         </span>
                       </div>
@@ -303,11 +303,11 @@ export default function AffiliatePayoutPage() {
                   </div>
 
                   {totalPages > 1 && (
-                    <div className="flex items-center justify-center gap-2 p-4 border-t border-[var(--border-color)]">
+                    <div className="flex items-center justify-center gap-2 p-3 sm:p-4 border-t border-[var(--border-color)]">
                       <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page <= 1} className="btn-icon">
                         <ChevronLeft size={16} />
                       </button>
-                      <span className="text-sm text-[var(--text-secondary)]">
+                      <span className="text-xs sm:text-sm text-[var(--text-secondary)]">
                         {page} / {totalPages}
                       </span>
                       <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page >= totalPages} className="btn-icon">
