@@ -34,6 +34,7 @@ interface AppSettings {
   template_send_account: string;
   template_warranty: string;
   template_promo: string;
+  template_wa_expired: string;
 }
 
 interface TagItem {
@@ -56,6 +57,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   template_send_account: "",
   template_warranty: "",
   template_promo: "",
+  template_wa_expired: "",
 };
 
 // ─── Template Metadata ───────────────────────────────────────────────────────
@@ -104,6 +106,15 @@ const TEMPLATE_TABS = [
     icon: Megaphone,
     color: "#ec4899",
     description: "Pesan promo / broadcast ke pelanggan",
+    variables: ["{{nama}}"],
+    preview: { nama: "Kasmawati" },
+  },
+  {
+    key: "template_wa_expired" as keyof AppSettings,
+    label: "WA Popup Expired",
+    icon: MessageSquare,
+    color: "#22c55e",
+    description: "Pesan WA saat klik tombol WA di popup filter masa aktif berakhir",
     variables: ["{{nama}}"],
     preview: { nama: "Kasmawati" },
   },

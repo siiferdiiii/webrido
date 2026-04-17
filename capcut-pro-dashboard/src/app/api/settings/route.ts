@@ -46,6 +46,11 @@ Ada promo spesial dari Dorizz Store untuk kamu hari ini! 🎉
 Dapatkan akun premium dengan harga terbaik dan nikmati semua fitur tanpa batas.
 
 Jangan lewatkan kesempatan ini! Hubungi kami sekarang untuk info lebih lanjut 🔥`,
+
+  template_wa_expired: `Halo {{nama}}, kami dari Dorizz Store 😊
+Masa aktif akun CapCut Pro kamu sudah berakhir. Yuk perpanjang lagi agar tetap bisa menikmati fitur premium!
+
+Info lebih lanjut bisa langsung chat ya 🙏`,
 };
 
 // GET /api/settings — ambil semua settings

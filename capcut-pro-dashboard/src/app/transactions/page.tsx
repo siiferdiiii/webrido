@@ -130,6 +130,10 @@ export default function TransactionsPage() {
   const [exportResult, setExportResult] = useState<{ ok: boolean; message: string } | null>(null);
   // Templates from settings
   const [settingsTemplates, setSettingsTemplates] = useState<Record<string, string>>({});
+  // Selected WA template for popup
+  const [selectedWATemplate, setSelectedWATemplate] = useState<string>("template_wa_expired");
+  const [customWAMessage, setCustomWAMessage] = useState<string>("");
+  const [showTemplateSettings, setShowTemplateSettings] = useState(false);
   
   const [showModal, setShowModal] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -898,10 +902,26 @@ export default function TransactionsPage() {
         const users = Array.from(userMap.values());
         const usersWithWA = users.filter(u => u.whatsapp);
 
+        // WA Template options for the popup
+        const WA_TEMPLATE_OPTIONS = [
+          { key: "template_wa_expired", label: "📋 WA Expired", color: "#22c55e", desc: "Template default expired" },
+          { key: "template_followup", label: "🔔 Follow-Up", color: "#818cf8", desc: "Template follow-up" },
+          { key: "template_promo", label: "🔥 Promo", color: "#f59e0b", desc: "Template promo" },
+          { key: "custom", label: "✏️ Custom", color: "#a78bfa", desc: "Tulis pesan sendiri" },
+        ];
+
+        function getActiveWAMessage(customerName: string) {
+          if (selectedWATemplate === "custom") {
+            return customWAMessage.replace(/\{\{nama\}\}/g, customerName).replace(/\{\{nama_customer\}\}/g, customerName);
+          }
+          const tpl = settingsTemplates[selectedWATemplate] || "";
+          return tpl.replace(/\{\{nama\}\}/g, customerName).replace(/\{\{nama_customer\}\}/g, customerName);
+        }
+
         function openWA(phone: string | null, name: string) {
           if (!phone) return;
           const num = phone.replace(/^0/, "62").replace(/\D/g, "");
-          const msg = encodeURIComponent(`Halo ${name}, kami dari Dorizz Store 😊\nMasa aktif akun CapCut Pro kamu sudah berakhir. Yuk perpanjang lagi agar tetap bisa menikmati fitur premium!\n\nInfo lebih lanjut bisa langsung chat ya 🙏`);
+          const msg = encodeURIComponent(getActiveWAMessage(name));
           window.open(`https://wa.me/${num}?text=${msg}`, "_blank");
         }
 
@@ -972,7 +992,107 @@ export default function TransactionsPage() {
               {/* ── STEP 1: Daftar User ── */}
               {exportStep === 1 && (
                 <>
-                  <div className="modal-body" style={{ maxHeight: 380, overflowY: "auto", padding: 0 }}>
+                  <div className="modal-body" style={{ maxHeight: 420, overflowY: "auto", padding: 0 }}>
+                    {/* ── Template Selector ── */}
+                    <div
+                      className="px-5 py-3"
+                      style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}
+                    >
+                      <button
+                        onClick={() => setShowTemplateSettings(v => !v)}
+                        className="flex items-center gap-2 w-full text-left mb-2"
+                      >
+                        <MessageCircle size={13} className="text-emerald-400 flex-shrink-0" />
+                        <span className="text-xs font-semibold text-white flex-1">Template Pesan WA</span>
+                        <span
+                          className="text-[10px] font-medium px-2 py-0.5 rounded-full"
+                          style={{
+                            background: `${WA_TEMPLATE_OPTIONS.find(o => o.key === selectedWATemplate)?.color || "#818cf8"}18`,
+                            color: WA_TEMPLATE_OPTIONS.find(o => o.key === selectedWATemplate)?.color || "#818cf8",
+                          }}
+                        >
+                          {WA_TEMPLATE_OPTIONS.find(o => o.key === selectedWATemplate)?.label || "Custom"}
+                        </span>
+                        <ChevronDown
+                          size={12}
+                          className="text-[var(--text-muted)] flex-shrink-0 transition-transform"
+                          style={{ transform: showTemplateSettings ? "rotate(180deg)" : undefined }}
+                        />
+                      </button>
+
+                      {showTemplateSettings && (
+                        <div className="space-y-2.5 mt-2 animate-in">
+                          {/* Template pills */}
+                          <div className="flex flex-wrap gap-1.5">
+                            {WA_TEMPLATE_OPTIONS.map(opt => (
+                              <button
+                                key={opt.key}
+                                onClick={() => setSelectedWATemplate(opt.key)}
+                                className="text-[11px] px-2.5 py-1.5 rounded-lg transition-all font-medium"
+                                style={{
+                                  background: selectedWATemplate === opt.key ? `${opt.color}20` : "rgba(255,255,255,0.04)",
+                                  border: `1px solid ${selectedWATemplate === opt.key ? `${opt.color}45` : "rgba(255,255,255,0.08)"}`,
+                                  color: selectedWATemplate === opt.key ? opt.color : "var(--text-muted)",
+                                }}
+                              >
+                                {opt.label}
+                              </button>
+                            ))}
+                          </div>
+
+                          {/* Preview / edit area */}
+                          {selectedWATemplate === "custom" ? (
+                            <div className="space-y-1.5">
+                              <textarea
+                                className="form-input w-full text-xs"
+                                rows={4}
+                                value={customWAMessage}
+                                onChange={e => setCustomWAMessage(e.target.value)}
+                                placeholder="Tulis pesan custom kamu di sini...&#10;Gunakan {{nama}} untuk nama pelanggan"
+                                style={{ resize: "none", fontSize: 11 }}
+                              />
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-[10px] text-[var(--text-muted)]">Variabel:</span>
+                                <button
+                                  type="button"
+                                  onClick={() => setCustomWAMessage(prev => prev + "{{nama}}")}
+                                  className="text-[10px] px-1.5 py-0.5 rounded-md"
+                                  style={{ background: "rgba(139,92,246,0.12)", border: "1px solid rgba(139,92,246,0.25)", color: "#a78bfa" }}
+                                >
+                                  {"{{nama}}"}
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <div
+                              className="p-2.5 rounded-xl text-[11px] leading-relaxed whitespace-pre-wrap"
+                              style={{
+                                background: "rgba(0,0,0,0.25)",
+                                border: "1px solid rgba(255,255,255,0.06)",
+                                color: "var(--text-secondary)",
+                                maxHeight: 120,
+                                overflowY: "auto",
+                              }}
+                            >
+                              {(settingsTemplates[selectedWATemplate] || "Template belum diatur. Atur di halaman Pengaturan.").replace(/\{\{nama\}\}/g, "Nama Pelanggan")}
+                            </div>
+                          )}
+
+                          <p className="text-[10px] text-[var(--text-muted)] flex items-center gap-1">
+                            <ExternalLink size={9} />
+                            Edit template permanen di menu{" "}
+                            <button
+                              onClick={() => router.push("/settings")}
+                              className="underline text-[#818cf8] hover:text-[#a5b4fc] transition-colors"
+                            >
+                              Pengaturan
+                            </button>
+                          </p>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* ── User list ── */}
                     {users.length === 0 ? (
                       <div className="py-10 flex flex-col items-center gap-2">
                         <Users size={24} className="text-[var(--text-muted)]" />
