@@ -21,7 +21,7 @@ export async function GET(
       where: { id },
       include: {
         user: { select: { name: true, email: true, whatsapp: true } },
-        stockAccount: { select: { accountEmail: true, accountPassword: true, status: true, durationDays: true, productType: true } },
+        stockAccount: { select: { accountEmail: true, accountPassword: true, status: true, durationDays: true, productType: true, maxSlots: true } },
         warrantyClaims: {
           include: {
             oldAccount: { select: { accountEmail: true, accountPassword: true } },
@@ -69,11 +69,12 @@ export async function GET(
             warrantyExpiredAt.setDate(warrantyExpiredAt.getDate() + warrantyDays);
             const newUsedSlots = (availableStock.usedSlots || 0) + 1;
             const maxSlots = availableStock.maxSlots || 3;
+            const isVoucher = maxSlots === 1;
 
             await prisma.$transaction([
               prisma.transaction.update({
                 where: { id: transaction.id },
-                data: { status: "success", purchaseDate: new Date(), stockAccountId: availableStock.id, warrantyExpiredAt },
+                data: { status: "success", purchaseDate: new Date(), stockAccountId: availableStock.id, warrantyExpiredAt: isVoucher ? null : warrantyExpiredAt },
               }),
               prisma.stockAccount.update({
                 where: { id: availableStock.id },
@@ -165,6 +166,7 @@ export async function GET(
             password: transaction!.stockAccount.accountPassword,
             type: transaction!.stockAccount.productType,
             duration: transaction!.stockAccount.durationDays,
+            maxSlots: transaction!.stockAccount.maxSlots,
           }
         : null,
       warrantyClaims: transaction!.warrantyClaims.map((wc) => ({

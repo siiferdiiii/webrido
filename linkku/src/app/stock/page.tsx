@@ -272,7 +272,7 @@ export default function StockPage() {
   // ── Product catalog state ──────────────────────────────────────────────────
   interface ProductItem {
     id: string; name: string; description: string; price: number;
-    duration: number; type: string; features: string[]; popular: boolean;
+    duration: number; type: string; features: string[]; popular: boolean; category?: string;
   }
   const [products, setProducts] = useState<ProductItem[]>([]);
   const [loadingProducts, setLoadingProducts] = useState(true);
@@ -402,17 +402,21 @@ export default function StockPage() {
   }
 
   async function handleAddSingle() {
-    if (!singleForm.email || !singleForm.password || !selectedProduct) return;
+    if (!singleForm.email || !selectedProduct) return;
+    const isVoucher = selectedProduct.category === "voucher";
+    const password = isVoucher ? "-" : singleForm.password;
+    if (!isVoucher && !singleForm.password) return;
+    
     setSubmitting(true);
     await fetch("/api/stock", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         email: singleForm.email,
-        password: singleForm.password,
+        password: password,
         durationDays: singleForm.duration,
         productType: selectedProduct.id,
-        maxSlots: singleForm.maxSlots,
+        maxSlots: isVoucher ? 1 : singleForm.maxSlots,
       }),
     });
     setSubmitting(false);
@@ -423,8 +427,13 @@ export default function StockPage() {
 
   async function handleBulkImport() {
     if (!selectedProduct) return;
+    const isVoucher = selectedProduct.category === "voucher";
     const lines = bulkText.split("\n").filter((l) => l.trim());
+    
     const accounts = lines.map((line) => {
+      if (isVoucher) {
+        return { email: line.trim(), password: "-" };
+      }
       const [email, password] = line.split(":").map((s) => s.trim());
       return { email, password };
     }).filter((a) => a.email && a.password);
@@ -433,7 +442,7 @@ export default function StockPage() {
     await fetch("/api/stock", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ accounts, durationDays: bulkDuration, productType: selectedProduct.id, maxSlots: bulkMaxSlots }),
+      body: JSON.stringify({ accounts, durationDays: bulkDuration, productType: selectedProduct.id, maxSlots: isVoucher ? 1 : bulkMaxSlots }),
     });
     setSubmitting(false);
     setShowBulkModal(false);
@@ -792,27 +801,37 @@ export default function StockPage() {
               <button className="btn-icon" onClick={() => setShowSingleModal(false)}><X size={18} /></button>
             </div>
             <div className="modal-body space-y-4">
-              <div><label className="form-label">Email Akun</label><input type="email" className="form-input" placeholder="email@capcut.com" value={singleForm.email} onChange={(e) => setSingleForm({ ...singleForm, email: e.target.value })} /></div>
-              <div><label className="form-label">Password Akun</label><input type="text" className="form-input" placeholder="Masukkan password" value={singleForm.password} onChange={(e) => setSingleForm({ ...singleForm, password: e.target.value })} /></div>
+              <div><label className="form-label">{selectedProduct?.category === 'voucher' ? 'Kode Voucher / Key' : 'Email Akun'}</label><input type={selectedProduct?.category === 'voucher' ? 'text' : 'email'} className="form-input" placeholder={selectedProduct?.category === 'voucher' ? 'GARENA-1234...' : 'email@capcut.com'} value={singleForm.email} onChange={(e) => setSingleForm({ ...singleForm, email: e.target.value })} /></div>
+              {selectedProduct?.category !== 'voucher' && (
+                <div><label className="form-label">Password Akun</label><input type="text" className="form-input" placeholder="Masukkan password" value={singleForm.password} onChange={(e) => setSingleForm({ ...singleForm, password: e.target.value })} /></div>
+              )}
               <div className="p-3 rounded-lg bg-[rgba(255,255,255,0.05)] border border-[rgba(255,255,255,0.1)]">
                 <p className="text-xs text-[var(--text-muted)] mb-1">Target Produk:</p>
                 <p className="text-sm font-semibold text-white">{selectedProduct?.name} <span className="text-[10px] bg-[rgba(255,255,255,0.1)] px-1.5 py-0.5 rounded ml-1 font-mono">{selectedProduct?.id}</span></p>
               </div>
-              <div>
-                <label className="form-label">Slot Pengguna</label>
-                <div className="flex gap-2">
-                  {[1, 2, 3, 4, 5].map((n) => (
-                    <button key={n} type="button" onClick={() => setSingleForm({ ...singleForm, maxSlots: n })}
-                      className={`w-10 h-10 rounded-lg text-sm font-bold border transition-all ${singleForm.maxSlots === n ? "border-[var(--accent)] bg-[rgba(99,102,241,0.15)] text-[var(--accent)]" : "border-[rgba(255,255,255,0.1)] text-[var(--text-muted)] hover:border-[rgba(255,255,255,0.2)]"}`}>
-                      {n}
-                    </button>
-                  ))}
+              {selectedProduct?.category !== 'voucher' ? (
+                <>
+                  <div>
+                    <label className="form-label">Slot Pengguna</label>
+                    <div className="flex gap-2">
+                      {[1, 2, 3, 4, 5].map((n) => (
+                        <button key={n} type="button" onClick={() => setSingleForm({ ...singleForm, maxSlots: n })}
+                          className={`w-10 h-10 rounded-lg text-sm font-bold border transition-all ${singleForm.maxSlots === n ? "border-[var(--accent)] bg-[rgba(99,102,241,0.15)] text-[var(--accent)]" : "border-[rgba(255,255,255,0.1)] text-[var(--text-muted)] hover:border-[rgba(255,255,255,0.2)]"}`}>
+                          {n}
+                        </button>
+                      ))}
+                    </div>
+                    <p className="text-[10px] text-[var(--text-muted)] mt-1">
+                      {selectedProduct?.type === "desktop" ? "Rekomendasi: 2 slot untuk Laptop/Mac/Desktop" : "Rekomendasi: 3 slot untuk HP/iPad/Tablet"}
+                    </p>
+                  </div>
+                  <div><label className="form-label">Durasi Langganan</label><select className="form-input" value={singleForm.duration} onChange={(e) => setSingleForm({ ...singleForm, duration: parseInt(e.target.value) })}><option value="30">30 Hari</option><option value="60">60 Hari</option><option value="90">90 Hari</option><option value="180">180 Hari</option><option value="365">365 Hari</option></select></div>
+                </>
+              ) : (
+                <div className="p-3 rounded-xl bg-indigo-500/10 border border-indigo-500/20">
+                  <p className="text-xs text-indigo-300">Konfigurasi slot & durasi otomatis diset sesuai kategori Voucher (1 slot/kode).</p>
                 </div>
-                <p className="text-[10px] text-[var(--text-muted)] mt-1">
-                  {singleForm.productType === "mobile" ? "Rekomendasi: 3 slot untuk HP/iPad/Tablet" : "Rekomendasi: 2 slot untuk Laptop/Mac/Desktop"}
-                </p>
-              </div>
-              <div><label className="form-label">Durasi Langganan</label><select className="form-input" value={singleForm.duration} onChange={(e) => setSingleForm({ ...singleForm, duration: parseInt(e.target.value) })}><option value="30">30 Hari</option><option value="60">60 Hari</option><option value="90">90 Hari</option></select></div>
+              )}
             </div>
             <div className="modal-footer">
               <button className="btn-secondary" onClick={() => setShowSingleModal(false)}>Batal</button>

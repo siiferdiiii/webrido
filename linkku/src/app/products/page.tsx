@@ -23,6 +23,8 @@ interface ProductItem {
   type: string;
   features: string[];
   popular: boolean;
+  category?: "account" | "voucher";
+  imageUrl?: string;
 }
 
 function formatCurrency(amount: number) {
@@ -36,7 +38,7 @@ export default function ProductsPage() {
   const [showProductForm, setShowProductForm] = useState(false);
   const [editProductIdx, setEditProductIdx] = useState<number | null>(null);
   const [productForm, setProductForm] = useState<ProductItem>({
-    id: "", name: "", description: "", price: 0, duration: 30, type: "mobile", features: [], popular: false,
+    id: "", name: "", description: "", price: 0, duration: 30, type: "mobile", features: [], popular: false, category: "account", imageUrl: ""
   });
   const [featureInput, setFeatureInput] = useState("");
   const [savingProduct, setSavingProduct] = useState(false);
@@ -59,16 +61,56 @@ export default function ProductsPage() {
 
   function openAddProduct() {
     setEditProductIdx(null);
-    setProductForm({ id: "", name: "", description: "", price: 0, duration: 30, type: "mobile", features: [], popular: false });
+    setProductForm({ id: "", name: "", description: "", price: 0, duration: 30, type: "mobile", features: [], popular: false, category: "account", imageUrl: "" });
     setFeatureInput("");
     setShowProductForm(true);
   }
 
   function openEditProduct(idx: number) {
     setEditProductIdx(idx);
-    setProductForm({ ...products[idx] });
+    const p = products[idx];
+    setProductForm({ ...p, category: p.category || "account", imageUrl: p.imageUrl || "" });
     setFeatureInput("");
     setShowProductForm(true);
+  }
+
+  function handleImageUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        const MAX_WIDTH = 800;
+        const MAX_HEIGHT = 800;
+        let width = img.width;
+        let height = img.height;
+
+        if (width > height) {
+          if (width > MAX_WIDTH) {
+            height *= MAX_WIDTH / width;
+            width = MAX_WIDTH;
+          }
+        } else {
+          if (height > MAX_HEIGHT) {
+            width *= MAX_HEIGHT / height;
+            height = MAX_HEIGHT;
+          }
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        ctx?.drawImage(img, 0, 0, width, height);
+
+        const dataUrl = canvas.toDataURL("image/webp", 0.8);
+        setProductForm(p => ({ ...p, imageUrl: dataUrl }));
+      };
+      img.src = event.target?.result as string;
+    };
+    reader.readAsDataURL(file);
   }
 
   function addFeature() {
@@ -194,13 +236,32 @@ export default function ProductsPage() {
                 <div><label className="form-label">Nama Produk</label><input type="text" className="form-input" value={productForm.name} onChange={e => setProductForm(p => ({ ...p, name: e.target.value }))} placeholder="CapCut Pro Mobile" /></div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="form-label">Tipe Produk</label>
+                    <label className="form-label">Kategori</label>
+                    <div className="flex gap-2">
+                       <button type="button" onClick={() => setProductForm(p => ({ ...p, category: "account" }))} className={`flex-1 py-2 rounded-lg text-xs font-medium border transition-all ${productForm.category !== "voucher" ? "border-indigo-500 bg-indigo-500/15 text-indigo-400" : "border-[rgba(255,255,255,0.1)] text-[var(--text-muted)]"}`}>Akun</button>
+                       <button type="button" onClick={() => setProductForm(p => ({ ...p, category: "voucher" }))} className={`flex-1 py-2 rounded-lg text-xs font-medium border transition-all ${productForm.category === "voucher" ? "border-fuchsia-500 bg-fuchsia-500/15 text-fuchsia-400" : "border-[rgba(255,255,255,0.1)] text-[var(--text-muted)]"}`}>Voucher</button>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="form-label">Tipe (Platform)</label>
                     <div className="flex gap-2">
                       <button type="button" onClick={() => setProductForm(p => ({ ...p, type: "mobile" }))} className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-medium border transition-all ${productForm.type === "mobile" ? "border-green-500 bg-green-500/15 text-green-400" : "border-[rgba(255,255,255,0.1)] text-[var(--text-muted)]"}`}><Smartphone size={14} /> Mobile</button>
                       <button type="button" onClick={() => setProductForm(p => ({ ...p, type: "desktop" }))} className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-medium border transition-all ${productForm.type === "desktop" ? "border-blue-500 bg-blue-500/15 text-blue-400" : "border-[rgba(255,255,255,0.1)] text-[var(--text-muted)]"}`}><Monitor size={14} /> Desktop</button>
                     </div>
                   </div>
+                </div>
+                {productForm.category !== "voucher" && (
                   <div><label className="form-label">Durasi (Hari)</label><select className="form-input" value={productForm.duration} onChange={e => setProductForm(p => ({ ...p, duration: parseInt(e.target.value) }))}><option value="30">30 Hari</option><option value="60">60 Hari</option><option value="90">90 Hari</option><option value="180">180 Hari</option><option value="365">365 Hari</option></select></div>
+                )}
+                <div>
+                  <label className="form-label">Gambar Produk (Opsional)</label>
+                  <div className="flex items-center gap-4">
+                    {productForm.imageUrl && (
+                      <img src={productForm.imageUrl} alt="Preview" style={{ width: 64, height: 64, objectFit: "cover", borderRadius: 12, border: "1px solid rgba(255,255,255,0.1)" }} />
+                    )}
+                    <input type="file" accept="image/*" onChange={handleImageUpload} className="text-xs text-[var(--text-muted)] file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-indigo-500/20 file:text-indigo-400 hover:file:bg-indigo-500/30 transition-all cursor-pointer" />
+                  </div>
+                  <p className="text-[10px] text-[var(--text-muted)] mt-1">Gambar akan dikompres otomatis. Rasio rekomendasi 1:1.</p>
                 </div>
                 <div><label className="form-label">Deskripsi / Copywriting</label><textarea className="form-input" rows={2} value={productForm.description} onChange={e => setProductForm(p => ({ ...p, description: e.target.value }))} placeholder="Akses semua fitur premium CapCut di HP selama 30 hari" /></div>
                 <div>

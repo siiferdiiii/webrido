@@ -27,6 +27,8 @@ interface Product {
   type: string;
   features: string[];
   popular: boolean;
+  category?: "account" | "voucher";
+  imageUrl?: string;
   stock?: { accounts: number; slots: number };
 }
 
@@ -453,6 +455,13 @@ function MarketplaceContent() {
                     </div>
                   </div>
 
+                  {/* Image Cover */}
+                  {product.imageUrl && (
+                    <div style={{ marginBottom: 16, borderRadius: 12, overflow: "hidden", border: "1px solid rgba(255,255,255,0.05)", background: "rgba(0,0,0,0.2)" }}>
+                      <img src={product.imageUrl} alt={product.name} style={{ width: "100%", height: 140, objectFit: "cover" }} />
+                    </div>
+                  )}
+
                   {/* Name */}
                   <h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 4 }}>{product.name}</h3>
                   <p style={{ fontSize: 12, color: "rgba(255,255,255,0.4)", marginBottom: 16, lineHeight: 1.5 }}>
@@ -472,9 +481,11 @@ function MarketplaceContent() {
                     >
                       {formatCurrency(product.price)}
                     </span>
-                    <span style={{ fontSize: 12, color: "rgba(255,255,255,0.35)", marginLeft: 4 }}>
-                      / {product.duration} hari
-                    </span>
+                    {product.category !== "voucher" && (
+                      <span style={{ fontSize: 12, color: "rgba(255,255,255,0.35)", marginLeft: 4 }}>
+                        / {product.duration} hari
+                      </span>
+                    )}
                   </div>
 
                   {/* Features */}
@@ -722,10 +733,12 @@ function MarketplaceContent() {
                   <span style={{ fontSize: 13, color: "rgba(255,255,255,0.5)" }}>Produk</span>
                   <span style={{ fontSize: 13, fontWeight: 600 }}>{selectedProduct.name}</span>
                 </div>
-                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
-                  <span style={{ fontSize: 13, color: "rgba(255,255,255,0.5)" }}>Durasi</span>
-                  <span style={{ fontSize: 13, fontWeight: 600 }}>{selectedProduct.duration} Hari</span>
-                </div>
+                {selectedProduct.category !== "voucher" && (
+                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
+                    <span style={{ fontSize: 13, color: "rgba(255,255,255,0.5)" }}>Durasi</span>
+                    <span style={{ fontSize: 13, fontWeight: 600 }}>{selectedProduct.duration} Hari</span>
+                  </div>
+                )}
                 <div
                   style={{
                     display: "flex",

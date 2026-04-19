@@ -133,13 +133,14 @@ export async function POST(req: NextRequest) {
 
           const newUsedSlots = (stock.usedSlots || 0) + 1;
           const maxSlots = stock.maxSlots || 3;
+          const isVoucher = maxSlots === 1;
 
           await prisma.$transaction([
             prisma.transaction.update({
               where: { id: transaction.id },
               data: {
                 stockAccountId: stock.id,
-                warrantyExpiredAt,
+                warrantyExpiredAt: isVoucher ? null : warrantyExpiredAt,
               },
             }),
             prisma.stockAccount.update({

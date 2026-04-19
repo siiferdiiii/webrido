@@ -151,6 +151,8 @@ export async function POST(req: NextRequest) {
 
       // 3. Hitung tanggal expired garansi (fix days, bukan calendar month)
       const warrantyExpiredAt = calcWarrantyExpiry(new Date(), durationDays);
+      const maxSlots = availableAccount.maxSlots ?? 3;
+      const isVoucher = maxSlots === 1;
 
       // 4. Buat transaksi
       const transaction = await tx.transaction.create({
@@ -161,7 +163,8 @@ export async function POST(req: NextRequest) {
           productName: productName || null,
           status: "success",
           isManual: true,
-          warrantyExpiredAt,
+          purchaseDate: new Date(),
+          warrantyExpiredAt: isVoucher ? null : warrantyExpiredAt,
         },
         include: {
           user: true,
@@ -172,7 +175,6 @@ export async function POST(req: NextRequest) {
       // 5. FIX #1: Atomic update slot — updateMany dengan kondisi slot check
       // Jika ada race condition, updated.count akan 0 dan transaction akan di-rollback
       const newUsedSlots = (availableAccount.usedSlots ?? 0) + 1;
-      const maxSlots = availableAccount.maxSlots ?? 3;
       const updated = await tx.stockAccount.updateMany({
         where: {
           id: availableAccount.id,

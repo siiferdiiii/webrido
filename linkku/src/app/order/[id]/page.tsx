@@ -18,7 +18,7 @@ interface OrderData {
   warrantyExpiredAt: string | null;
   warrantyActive: boolean;
   customer: { name: string; email: string; whatsapp: string } | null;
-  account: { email: string; password: string; type: string; duration: number } | null;
+  account: { email: string; password: string; type: string; duration: number; maxSlots?: number } | null;
   warrantyClaims: Array<{
     id: string;
     reason: string;
@@ -247,7 +247,7 @@ export default function OrderDetailPage() {
           <div style={{ ...styles.card, border: "1px solid rgba(16, 185, 129, 0.25)" }}>
             <div style={styles.cardHeader}>
               <Lock size={16} color="#34d399" />
-              <span style={{ fontSize: 14, fontWeight: 600, color: "#6ee7b7" }}>Akun Kamu {order.warrantyClaims.some(c => c.status === "resolved") && "(Terbaru)"}</span>
+              <span style={{ fontSize: 14, fontWeight: 600, color: "#6ee7b7" }}>{order.account.maxSlots === 1 ? "Detail Voucher" : "Akun Kamu"} {order.warrantyClaims.some(c => c.status === "resolved") && "(Terbaru)"}</span>
             </div>
             
             {order.warrantyClaims.filter(c => c.status === "resolved").map((claim) => claim.oldAccount ? (
@@ -271,7 +271,7 @@ export default function OrderDetailPage() {
 
             <div style={styles.credentialRow}>
               <div>
-                <span style={{ fontSize: 11, color: "#64748b", display: "block" }}>Email</span>
+                <span style={{ fontSize: 11, color: "#64748b", display: "block" }}>{order.account.maxSlots === 1 ? "Kode Voucher / Key" : "Email"}</span>
                 <span style={{ fontSize: 14, color: "#f1f5f9" }}>{order.account.email}</span>
               </div>
               <button
@@ -281,28 +281,32 @@ export default function OrderDetailPage() {
                 {copied === "email" ? <CheckCircle size={14} color="#34d399" /> : <Copy size={14} />}
               </button>
             </div>
-            <div style={styles.credentialRow}>
-              <div>
-                <span style={{ fontSize: 11, color: "#64748b", display: "block" }}>Password</span>
-                <span style={{ fontSize: 14, color: "#f1f5f9", fontFamily: "monospace" }}>
-                  {order.account.password}
-                </span>
+            {order.account.maxSlots !== 1 && (
+              <div style={styles.credentialRow}>
+                <div>
+                  <span style={{ fontSize: 11, color: "#64748b", display: "block" }}>Password</span>
+                  <span style={{ fontSize: 14, color: "#f1f5f9", fontFamily: "monospace" }}>
+                    {order.account.password}
+                  </span>
+                </div>
+                <button
+                  onClick={() => copyToClipboard(order.account!.password, "password")}
+                  style={styles.copyBtn}
+                >
+                  {copied === "password" ? <CheckCircle size={14} color="#34d399" /> : <Copy size={14} />}
+                </button>
               </div>
-              <button
-                onClick={() => copyToClipboard(order.account!.password, "password")}
-                style={styles.copyBtn}
-              >
-                {copied === "password" ? <CheckCircle size={14} color="#34d399" /> : <Copy size={14} />}
-              </button>
-            </div>
+            )}
             <div style={styles.row}>
               <span style={styles.label}>Tipe</span>
               <span style={styles.value}>{order.account.type}</span>
             </div>
-            <div style={styles.row}>
-              <span style={styles.label}>Durasi</span>
-              <span style={styles.value}>{order.account.duration} hari</span>
-            </div>
+            {order.account.maxSlots !== 1 && (
+              <div style={styles.row}>
+                <span style={styles.label}>Durasi</span>
+                <span style={styles.value}>{order.account.duration} hari</span>
+              </div>
+            )}
           </div>
         ) : (
           <div style={{ ...styles.card, textAlign: "center", padding: 32 }}>
@@ -317,6 +321,7 @@ export default function OrderDetailPage() {
         )}
 
         {/* Warranty Section */}
+        {(!order.account || order.account.maxSlots !== 1) && (
         <div style={styles.card}>
           <div style={styles.cardHeader}>
             <Shield size={16} color={order.warrantyActive ? "#34d399" : "#fb7185"} />
@@ -458,6 +463,7 @@ export default function OrderDetailPage() {
             </div>
           )}
         </div>
+        )}
 
         {/* Affiliate CTA Card */}
         <div style={{

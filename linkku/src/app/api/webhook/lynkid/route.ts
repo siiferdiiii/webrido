@@ -159,6 +159,9 @@ export async function POST(req: NextRequest) {
       const purchaseDate = messageData.createdAt ? new Date(messageData.createdAt) : new Date();
       const warrantyExpiredAt = calcWarrantyExpiry(purchaseDate, durationDays);
 
+      const accountMaxSlots = account.maxSlots ?? maxSlotsForType;
+      const isVoucher = accountMaxSlots === 1;
+
       const transaction = await tx.transaction.create({
         data: {
           lynkIdRef: refId || null,
@@ -169,13 +172,12 @@ export async function POST(req: NextRequest) {
           status: "success",
           isManual: false,
           purchaseDate,
-          warrantyExpiredAt,
+          warrantyExpiredAt: isVoucher ? null : warrantyExpiredAt,
         },
       });
 
       // ===== 5. FIX #1: Atomic update slot =====
       const newUsedSlots = (account.usedSlots ?? 0) + 1;
-      const accountMaxSlots = account.maxSlots ?? maxSlotsForType;
       const updated = await tx.stockAccount.updateMany({
         where: {
           id: account.id,
