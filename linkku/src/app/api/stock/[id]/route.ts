@@ -20,9 +20,8 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
       return NextResponse.json({ error: "Akun tidak ditemukan" }, { status: 404 });
     }
 
-    // Boleh hapus hanya jika tidak ada transaksi yang terhubung
-    // Atau status bukan in_use (untuk safety)
-    if (account.status === "in_use" && (account.usedSlots ?? 0) > 0) {
+    // Boleh hapus hanya jika slot kosong (tidak ada pengguna aktif)
+    if ((account.usedSlots ?? 0) > 0) {
       return NextResponse.json(
         { error: "Akun sedang digunakan pelanggan aktif. Pastikan slot kosong sebelum menghapus." },
         { status: 400 }

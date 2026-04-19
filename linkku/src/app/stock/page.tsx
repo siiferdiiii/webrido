@@ -60,24 +60,21 @@ interface StockResponse {
   remainingSlotsDesktop: number;
 }
 
-const statusFilters = ["Semua", "available", "in_use", "sold"];
-const statusLabels: Record<string, string> = { Semua: "Semua", available: "Tersedia", in_use: "Digunakan", sold: "Sold" };
+const statusFilters = ["Semua", "available", "sold"];
+const statusLabels: Record<string, string> = { Semua: "Semua", available: "Tersedia", sold: "Sold" };
 
 function getEffectiveStatus(status: string | null, usedSlots: number | null, maxSlots: number | null) {
-  // Override: jika slot penuh tapi DB masih "in_use" (data stale)
-  if (status === "in_use" && (usedSlots ?? 0) >= (maxSlots ?? 3)) return "full";
-  return status;
+  const used = usedSlots ?? 0;
+  const max = maxSlots ?? 3;
+  if (used < max) return "available";
+  return "sold";
 }
 
 function getStockBadge(status: string | null, usedSlots?: number | null, maxSlots?: number | null) {
   const eff = getEffectiveStatus(status, usedSlots ?? null, maxSlots ?? null);
   switch (eff) {
     case "available": return <span className="badge badge-success">Tersedia</span>;
-    case "in_use": return <span className="badge badge-info">Digunakan</span>;
     case "sold": return <span className="badge badge-neutral">Sold</span>;
-    case "full": return <span className="badge badge-neutral">Full</span>;
-    case "banned": return <span className="badge badge-danger">Banned</span>;
-    case "expired": return <span className="badge badge-warning">Expired</span>;
     default: return <span className="badge badge-neutral">{eff}</span>;
   }
 }
@@ -270,6 +267,7 @@ export default function StockPage() {
   // State data
   const [accounts, setAccounts] = useState<StockItem[]>([]);
   const [total, setTotal] = useState(0);
+<<<<<<< HEAD:linkku/src/app/stock/page.tsx
   const [statusCounts, setStatusCounts] = useState<Record<string, number>>({ available: 0, in_use: 0, sold: 0 });
   const [remainingSlots, setRemainingSlots] = useState(0);
   // ── Product catalog state ──────────────────────────────────────────────────
@@ -302,6 +300,15 @@ export default function StockPage() {
       setProductTypeFilter(p.id);
     }
   }
+=======
+  const [statusCounts, setStatusCounts] = useState<Record<string, number>>({ available: 0, sold: 0 });
+  const [mobileStatusCounts, setMobileStatusCounts] = useState<Record<string, number>>({ available: 0, sold: 0 });
+  const [mobileTotal, setMobileTotal] = useState(0);
+  const [desktopStatusCounts, setDesktopStatusCounts] = useState<Record<string, number>>({ available: 0, sold: 0 });
+  const [desktopTotal, setDesktopTotal] = useState(0);
+  const [remainingSlotsMobile, setRemainingSlotsMobile] = useState(0);
+  const [remainingSlotsDesktop, setRemainingSlotsDesktop] = useState(0);
+>>>>>>> 6a3f9939c61eb1eb87c7a49424db2272b0dc9d47:capcut-pro-dashboard/src/app/stock/page.tsx
 
   // Load More
   const [page, setPage] = useState(1);
@@ -374,10 +381,26 @@ export default function StockPage() {
         setTotal(json.total || 0);
         setHasMore(newAccounts.length >= limit);
         // Stats always use latest
-        const sc: Record<string, number> = { available: 0, in_use: 0, sold: 0 };
+        const sc: Record<string, number> = { available: 0, sold: 0 };
         (json.statusCounts ? Object.entries(json.statusCounts) : []).forEach(([k, v]) => { sc[k] = v as number; });
         setStatusCounts(sc);
+<<<<<<< HEAD:linkku/src/app/stock/page.tsx
         setRemainingSlots(json.remainingSlots ?? 0);
+=======
+
+        const msc: Record<string, number> = { available: 0, sold: 0 };
+        (json.mobileStatusCounts ? Object.entries(json.mobileStatusCounts) : []).forEach(([k, v]) => { msc[k] = v as number; });
+        setMobileStatusCounts(msc);
+        setMobileTotal(json.mobileTotal ?? 0);
+
+        const dsc: Record<string, number> = { available: 0, sold: 0 };
+        (json.desktopStatusCounts ? Object.entries(json.desktopStatusCounts) : []).forEach(([k, v]) => { dsc[k] = v as number; });
+        setDesktopStatusCounts(dsc);
+        setDesktopTotal(json.desktopTotal ?? 0);
+
+        setRemainingSlotsMobile(json.remainingSlotsMobile ?? 0);
+        setRemainingSlotsDesktop(json.remainingSlotsDesktop ?? 0);
+>>>>>>> 6a3f9939c61eb1eb87c7a49424db2272b0dc9d47:capcut-pro-dashboard/src/app/stock/page.tsx
       })
       .catch((err) => console.error(err))
       .finally(() => {
@@ -522,7 +545,109 @@ export default function StockPage() {
 
           {/* Card Keseluruhan / Terpilih */}
           <div
+<<<<<<< HEAD:linkku/src/app/stock/page.tsx
             className="col-span-1 sm:col-span-3 glass-card p-4 flex flex-col gap-3"
+=======
+            className="glass-card p-4 flex flex-col gap-3 cursor-pointer transition-all"
+            style={{
+              borderColor: productTypeFilter === "mobile" ? "rgba(34,197,94,0.6)" : "rgba(34,197,94,0.25)",
+              background: productTypeFilter === "mobile"
+                ? "linear-gradient(135deg,rgba(34,197,94,0.12),rgba(16,185,129,0.08))"
+                : "linear-gradient(135deg,rgba(34,197,94,0.05),rgba(16,185,129,0.03))",
+              boxShadow: productTypeFilter === "mobile" ? "0 0 0 2px rgba(34,197,94,0.2)" : undefined,
+            }}
+            onClick={() => setProductTypeFilter(productTypeFilter === "mobile" ? "Semua" : "mobile")}
+            title="Klik untuk filter Mobile"
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-green-500/15 flex items-center justify-center flex-shrink-0">
+                  <Smartphone size={16} className="text-green-400" />
+                </div>
+                <div>
+                  <p className="text-xs font-bold text-green-400 uppercase tracking-wider">Akun Mobile</p>
+                  <p className="text-[10px] text-[var(--text-muted)]">HP / iPad / Tablet</p>
+                </div>
+              </div>
+              <span
+                className="text-xs font-bold px-2 py-0.5 rounded-lg"
+                style={{ background: "rgba(34,197,94,0.12)", color: "#22c55e" }}
+              >
+                {mobileTotal} Akun
+              </span>
+            </div>
+            {/* Stats row */}
+            <div className="grid grid-cols-2 gap-2 pt-1 border-t border-green-500/10">
+              <div className="text-center">
+                <p className="text-xl font-bold text-emerald-400">{mobileStatusCounts.available || 0}</p>
+                <p className="text-[10px] text-[var(--text-muted)] mt-0.5">Tersedia</p>
+              </div>
+              <div className="text-center border-l border-green-500/10">
+                <p className="text-xl font-bold text-slate-400">{mobileStatusCounts.sold || 0}</p>
+                <p className="text-[10px] text-[var(--text-muted)] mt-0.5">Sold</p>
+              </div>
+            </div>
+            {/* Slot info */}
+            <div className="flex items-center justify-between pt-1 border-t border-green-500/10">
+              <span className="text-[10px] text-[var(--text-muted)]">Sisa Slot Tersedia</span>
+              <span className="text-sm font-bold text-green-400">{remainingSlotsMobile} slot</span>
+            </div>
+          </div>
+
+          {/* Card 2 — Desktop */}
+          <div
+            className="glass-card p-4 flex flex-col gap-3 cursor-pointer transition-all"
+            style={{
+              borderColor: productTypeFilter === "desktop" ? "rgba(59,130,246,0.6)" : "rgba(59,130,246,0.25)",
+              background: productTypeFilter === "desktop"
+                ? "linear-gradient(135deg,rgba(59,130,246,0.12),rgba(99,102,241,0.08))"
+                : "linear-gradient(135deg,rgba(59,130,246,0.05),rgba(99,102,241,0.03))",
+              boxShadow: productTypeFilter === "desktop" ? "0 0 0 2px rgba(59,130,246,0.2)" : undefined,
+            }}
+            onClick={() => setProductTypeFilter(productTypeFilter === "desktop" ? "Semua" : "desktop")}
+            title="Klik untuk filter Desktop"
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-blue-500/15 flex items-center justify-center flex-shrink-0">
+                  <Monitor size={16} className="text-blue-400" />
+                </div>
+                <div>
+                  <p className="text-xs font-bold text-blue-400 uppercase tracking-wider">Akun Desktop</p>
+                  <p className="text-[10px] text-[var(--text-muted)]">Laptop / Mac / PC</p>
+                </div>
+              </div>
+              <span
+                className="text-xs font-bold px-2 py-0.5 rounded-lg"
+                style={{ background: "rgba(59,130,246,0.12)", color: "#60a5fa" }}
+              >
+                {desktopTotal} Akun
+              </span>
+            </div>
+            {/* Stats row */}
+            <div className="grid grid-cols-2 gap-2 pt-1 border-t border-blue-500/10">
+              <div className="text-center">
+                <p className="text-xl font-bold text-emerald-400">{desktopStatusCounts.available || 0}</p>
+                <p className="text-[10px] text-[var(--text-muted)] mt-0.5">Tersedia</p>
+              </div>
+              <div className="text-center border-l border-blue-500/10">
+                <p className="text-xl font-bold text-slate-400">{desktopStatusCounts.sold || 0}</p>
+                <p className="text-[10px] text-[var(--text-muted)] mt-0.5">Sold</p>
+              </div>
+            </div>
+            {/* Slot info */}
+            <div className="flex items-center justify-between pt-1 border-t border-blue-500/10">
+              <span className="text-[10px] text-[var(--text-muted)]">Sisa Slot Tersedia</span>
+              <span className="text-sm font-bold text-blue-400">{remainingSlotsDesktop} slot</span>
+            </div>
+          </div>
+
+          {/* Card 3 — Overall / Keseluruhan */}
+          <div
+            className="glass-card p-4 flex flex-col gap-3"
+>>>>>>> 6a3f9939c61eb1eb87c7a49424db2272b0dc9d47:capcut-pro-dashboard/src/app/stock/page.tsx
             style={{ borderColor: "rgba(129,140,248,0.25)", background: "linear-gradient(135deg,rgba(129,140,248,0.06),rgba(99,102,241,0.03))" }}
           >
             {/* Header */}
@@ -540,20 +665,16 @@ export default function StockPage() {
                 className="text-xs font-bold px-2 py-0.5 rounded-lg"
                 style={{ background: "rgba(129,140,248,0.12)", color: "#818cf8" }}
               >
-                {(statusCounts.available || 0) + (statusCounts.in_use || 0) + (statusCounts.sold || 0)} Akun
+                {(statusCounts.available || 0) + (statusCounts.sold || 0)} Akun
               </span>
             </div>
             {/* Stats row */}
-            <div className="grid grid-cols-3 gap-2 pt-1 border-t border-indigo-500/10">
+            <div className="grid grid-cols-2 gap-2 pt-1 border-t border-indigo-500/10">
               <div className="text-center">
                 <p className="text-xl font-bold text-emerald-400">{statusCounts.available || 0}</p>
                 <p className="text-[10px] text-[var(--text-muted)] mt-0.5">Tersedia</p>
               </div>
-              <div className="text-center border-x border-indigo-500/10">
-                <p className="text-xl font-bold text-cyan-400">{statusCounts.in_use || 0}</p>
-                <p className="text-[10px] text-[var(--text-muted)] mt-0.5">Digunakan</p>
-              </div>
-              <div className="text-center">
+              <div className="text-center border-l border-indigo-500/10">
                 <p className="text-xl font-bold text-slate-400">{statusCounts.sold || 0}</p>
                 <p className="text-[10px] text-[var(--text-muted)] mt-0.5">Sold</p>
               </div>
@@ -912,9 +1033,7 @@ export default function StockPage() {
                   <AlertTriangle size={14} className="text-amber-400 flex-shrink-0 mt-0.5" />
                   <p className="text-xs text-amber-300">
                     Akun ini masih dipakai <strong>{deleteConfirm.usedSlots} pelanggan</strong>.
-                    Pastikan slot sudah tidak aktif sebelum menghapus, atau akun
-                    {" "}
-                    <span className="text-rose-400 font-semibold">in_use</span> tidak dapat dihapus.
+                    Pastikan slot sudah kosong sebelum menghapus.
                   </p>
                 </div>
               )}

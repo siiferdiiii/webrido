@@ -114,10 +114,9 @@ export async function POST(req: NextRequest) {
 
     // Cari akun baru yang tersedia dengan productType yang SAMA
     // PENTING: exclude akun lama agar tidak reassign akun yang sama!
-    // FIX #3: Tambah "full" ke status — akun full bisa jadi penerima setelah slot dikurangi
     const candidateAccounts = await prisma.stockAccount.findMany({
       where: {
-        status: { in: ["available", "in_use", "full"] },
+        status: "available",
         productType: oldProductType,
         ...(transaction.stockAccountId ? { id: { not: transaction.stockAccountId } } : {}),
       },
@@ -125,8 +124,7 @@ export async function POST(req: NextRequest) {
     });
 
     const newAccount = candidateAccounts.find(acc =>
-      acc.status === "available" ||
-      (acc.status === "in_use" && (acc.usedSlots ?? 0) < (acc.maxSlots ?? defaultMaxSlots))
+      (acc.usedSlots ?? 0) < (acc.maxSlots ?? defaultMaxSlots)
     ) ?? null;
 
     if (!newAccount) {
@@ -155,9 +153,8 @@ export async function POST(req: NextRequest) {
       const oldMaxSlots = oldAccount?.maxSlots ?? defaultMaxSlots;
       const newUsedSlotsOld = Math.max(0, currentUsedSlots - 1);
 
-      // Status: jika masih ada slot yang terpakai → in_use, jika kosong → available
-      // Tidak pernah auto-banned hanya karena klaim garansi
-      const oldAccountStatus = newUsedSlotsOld > 0 ? "in_use" : "available";
+      // Status: selalu available jika masih ada slot kosong
+      const oldAccountStatus = "available";
 
       await prisma.stockAccount.update({
         where: { id: transaction.stockAccountId },
@@ -169,14 +166,13 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // Set akun baru ke in_use/full dan increment slot
-    // FIX #3: Fix ternary yang selalu "in_use" — seharusnya "full" jika slot penuh
+    // Update slot akun baru: sold jika penuh, available jika masih ada sisa
     const newUsedSlots = (newAccount.usedSlots ?? 0) + 1;
     const newMaxSlots = newAccount.maxSlots ?? defaultMaxSlots;
     await prisma.stockAccount.update({
       where: { id: newAccount.id },
       data: {
-        status: newUsedSlots >= newMaxSlots ? "full" : "in_use",
+        status: newUsedSlots >= newMaxSlots ? "sold" : "available",
         usedSlots: { increment: 1 },
       },
     });
