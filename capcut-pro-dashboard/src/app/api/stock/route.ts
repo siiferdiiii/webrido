@@ -85,21 +85,19 @@ export async function GET(req: NextRequest) {
     }
 
     // ── Hitung stats Mobile (akurat berdasarkan usedSlots vs maxSlots) ──────
-    const mobileStatusCounts: Record<string, number> = { available: 0, in_use: 0, sold: 0 };
+    const mobileStatusCounts: Record<string, number> = { available: 0, sold: 0 };
     for (const acc of allMobileRaw) {
       const eff = effectiveStatus(acc, 3);
       if (eff === "available") mobileStatusCounts.available++;
-      else if (eff === "in_use") mobileStatusCounts.in_use++;
-      else mobileStatusCounts.sold++; // sold, full, full_stale, banned, expired
+      else mobileStatusCounts.sold++; // in_use, sold, full, full_stale, banned, expired
     }
     const mobileTotal = allMobileRaw.length;
 
     // ── Hitung stats Desktop (akurat berdasarkan usedSlots vs maxSlots) ─────
-    const desktopStatusCounts: Record<string, number> = { available: 0, in_use: 0, sold: 0 };
+    const desktopStatusCounts: Record<string, number> = { available: 0, sold: 0 };
     for (const acc of allDesktopRaw) {
       const eff = effectiveStatus(acc, 2);
       if (eff === "available") desktopStatusCounts.available++;
-      else if (eff === "in_use") desktopStatusCounts.in_use++;
       else desktopStatusCounts.sold++;
     }
     const desktopTotal = allDesktopRaw.length;
@@ -107,7 +105,6 @@ export async function GET(req: NextRequest) {
     // ── Overall (gabungan) ────────────────────────────────────────────────────
     const statusCounts: Record<string, number> = {
       available: mobileStatusCounts.available + desktopStatusCounts.available,
-      in_use: mobileStatusCounts.in_use + desktopStatusCounts.in_use,
       sold: mobileStatusCounts.sold + desktopStatusCounts.sold,
     };
 

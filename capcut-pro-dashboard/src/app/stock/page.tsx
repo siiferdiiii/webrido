@@ -59,8 +59,8 @@ interface StockResponse {
   remainingSlotsDesktop: number;
 }
 
-const statusFilters = ["Semua", "available", "in_use", "sold"];
-const statusLabels: Record<string, string> = { Semua: "Semua", available: "Tersedia", in_use: "Digunakan", sold: "Sold" };
+const statusFilters = ["Semua", "available", "sold"];
+const statusLabels: Record<string, string> = { Semua: "Semua", available: "Tersedia", sold: "Sold" };
 
 function getEffectiveStatus(status: string | null, usedSlots: number | null, maxSlots: number | null) {
   // Override: jika slot penuh tapi DB masih "in_use" (data stale)
@@ -72,7 +72,6 @@ function getStockBadge(status: string | null, usedSlots?: number | null, maxSlot
   const eff = getEffectiveStatus(status, usedSlots ?? null, maxSlots ?? null);
   switch (eff) {
     case "available": return <span className="badge badge-success">Tersedia</span>;
-    case "in_use": return <span className="badge badge-info">Digunakan</span>;
     case "sold": return <span className="badge badge-neutral">Sold</span>;
     case "full": return <span className="badge badge-neutral">Full</span>;
     case "banned": return <span className="badge badge-danger">Banned</span>;
@@ -269,10 +268,10 @@ export default function StockPage() {
   // State data
   const [accounts, setAccounts] = useState<StockItem[]>([]);
   const [total, setTotal] = useState(0);
-  const [statusCounts, setStatusCounts] = useState<Record<string, number>>({ available: 0, in_use: 0, sold: 0 });
-  const [mobileStatusCounts, setMobileStatusCounts] = useState<Record<string, number>>({ available: 0, in_use: 0, sold: 0 });
+  const [statusCounts, setStatusCounts] = useState<Record<string, number>>({ available: 0, sold: 0 });
+  const [mobileStatusCounts, setMobileStatusCounts] = useState<Record<string, number>>({ available: 0, sold: 0 });
   const [mobileTotal, setMobileTotal] = useState(0);
-  const [desktopStatusCounts, setDesktopStatusCounts] = useState<Record<string, number>>({ available: 0, in_use: 0, sold: 0 });
+  const [desktopStatusCounts, setDesktopStatusCounts] = useState<Record<string, number>>({ available: 0, sold: 0 });
   const [desktopTotal, setDesktopTotal] = useState(0);
   const [remainingSlotsMobile, setRemainingSlotsMobile] = useState(0);
   const [remainingSlotsDesktop, setRemainingSlotsDesktop] = useState(0);
@@ -348,16 +347,16 @@ export default function StockPage() {
         setTotal(json.total || 0);
         setHasMore(newAccounts.length >= limit);
         // Stats always use latest
-        const sc: Record<string, number> = { available: 0, in_use: 0, sold: 0 };
+        const sc: Record<string, number> = { available: 0, sold: 0 };
         (json.statusCounts ? Object.entries(json.statusCounts) : []).forEach(([k, v]) => { sc[k] = v as number; });
         setStatusCounts(sc);
 
-        const msc: Record<string, number> = { available: 0, in_use: 0, sold: 0 };
+        const msc: Record<string, number> = { available: 0, sold: 0 };
         (json.mobileStatusCounts ? Object.entries(json.mobileStatusCounts) : []).forEach(([k, v]) => { msc[k] = v as number; });
         setMobileStatusCounts(msc);
         setMobileTotal(json.mobileTotal ?? 0);
 
-        const dsc: Record<string, number> = { available: 0, in_use: 0, sold: 0 };
+        const dsc: Record<string, number> = { available: 0, sold: 0 };
         (json.desktopStatusCounts ? Object.entries(json.desktopStatusCounts) : []).forEach(([k, v]) => { dsc[k] = v as number; });
         setDesktopStatusCounts(dsc);
         setDesktopTotal(json.desktopTotal ?? 0);
@@ -477,16 +476,12 @@ export default function StockPage() {
               </span>
             </div>
             {/* Stats row */}
-            <div className="grid grid-cols-3 gap-2 pt-1 border-t border-green-500/10">
+            <div className="grid grid-cols-2 gap-2 pt-1 border-t border-green-500/10">
               <div className="text-center">
                 <p className="text-xl font-bold text-emerald-400">{mobileStatusCounts.available || 0}</p>
                 <p className="text-[10px] text-[var(--text-muted)] mt-0.5">Tersedia</p>
               </div>
-              <div className="text-center border-x border-green-500/10">
-                <p className="text-xl font-bold text-cyan-400">{mobileStatusCounts.in_use || 0}</p>
-                <p className="text-[10px] text-[var(--text-muted)] mt-0.5">Digunakan</p>
-              </div>
-              <div className="text-center">
+              <div className="text-center border-l border-green-500/10">
                 <p className="text-xl font-bold text-slate-400">{mobileStatusCounts.sold || 0}</p>
                 <p className="text-[10px] text-[var(--text-muted)] mt-0.5">Sold</p>
               </div>
@@ -530,16 +525,12 @@ export default function StockPage() {
               </span>
             </div>
             {/* Stats row */}
-            <div className="grid grid-cols-3 gap-2 pt-1 border-t border-blue-500/10">
+            <div className="grid grid-cols-2 gap-2 pt-1 border-t border-blue-500/10">
               <div className="text-center">
                 <p className="text-xl font-bold text-emerald-400">{desktopStatusCounts.available || 0}</p>
                 <p className="text-[10px] text-[var(--text-muted)] mt-0.5">Tersedia</p>
               </div>
-              <div className="text-center border-x border-blue-500/10">
-                <p className="text-xl font-bold text-cyan-400">{desktopStatusCounts.in_use || 0}</p>
-                <p className="text-[10px] text-[var(--text-muted)] mt-0.5">Digunakan</p>
-              </div>
-              <div className="text-center">
+              <div className="text-center border-l border-blue-500/10">
                 <p className="text-xl font-bold text-slate-400">{desktopStatusCounts.sold || 0}</p>
                 <p className="text-[10px] text-[var(--text-muted)] mt-0.5">Sold</p>
               </div>
@@ -571,20 +562,16 @@ export default function StockPage() {
                 className="text-xs font-bold px-2 py-0.5 rounded-lg"
                 style={{ background: "rgba(129,140,248,0.12)", color: "#818cf8" }}
               >
-                {(statusCounts.available || 0) + (statusCounts.in_use || 0) + (statusCounts.sold || 0)} Akun
+                {(statusCounts.available || 0) + (statusCounts.sold || 0)} Akun
               </span>
             </div>
             {/* Stats row */}
-            <div className="grid grid-cols-3 gap-2 pt-1 border-t border-indigo-500/10">
+            <div className="grid grid-cols-2 gap-2 pt-1 border-t border-indigo-500/10">
               <div className="text-center">
                 <p className="text-xl font-bold text-emerald-400">{statusCounts.available || 0}</p>
                 <p className="text-[10px] text-[var(--text-muted)] mt-0.5">Tersedia</p>
               </div>
-              <div className="text-center border-x border-indigo-500/10">
-                <p className="text-xl font-bold text-cyan-400">{statusCounts.in_use || 0}</p>
-                <p className="text-[10px] text-[var(--text-muted)] mt-0.5">Digunakan</p>
-              </div>
-              <div className="text-center">
+              <div className="text-center border-l border-indigo-500/10">
                 <p className="text-xl font-bold text-slate-400">{statusCounts.sold || 0}</p>
                 <p className="text-[10px] text-[var(--text-muted)] mt-0.5">Sold</p>
               </div>
