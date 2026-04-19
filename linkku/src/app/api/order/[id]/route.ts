@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getTransactionStatus, isPaymentSuccess, isPaymentFailed } from "@/lib/midtrans";
+import { sendTemplatedWhatsApp } from "@/lib/mpwa";
 
 /**
  * GET /api/order/[id]
@@ -42,17 +43,29 @@ export async function GET(
         console.log(`[Order Sync] Status for ${transaction.lynkIdRef}: ${midtransRes.transaction_status}`);
 
         if (isPaymentSuccess(midtransRes.transaction_status, midtransRes.fraud_status)) {
-          // Detect product type
-          const productName = (transaction.productName || "").toLowerCase();
-          const isDesktop = productName.includes("desktop") || productName.includes("pc") || productName.includes("mac");
-          const productType = isDesktop ? "desktop" : "mobile";
+          // Fetch products to map productName -> SKU
+          let targetSku = null;
+          try {
+            const setting = await prisma.appSetting.findUnique({ where: { key: "products" } });
+            if (setting && setting.value) {
+              const products = JSON.parse(setting.value);
+              const matched = products.find((p: any) => p.name.toLowerCase() === (transaction!.productName || "").toLowerCase());
+              if (matched) targetSku = matched.id;
+            }
+          } catch (e) {
+            console.error("[Order Sync] Error fetching products for SKU mapping:", e);
+          }
 
-          // Auto-assign stock
+          // If SKU is not resolved, fallback to the old fuzzy logic for backward compatibility
+          if (!targetSku) {
+            const productName = (transaction!.productName || "").toLowerCase();
+            const isDesktop = productName.includes("desktop") || productName.includes("pc") || productName.includes("mac");
+            targetSku = isDesktop ? "desktop" : "mobile";
+          }
+
+          // Auto-assign stock strictly matching product SKU/Type
           const availableStock = await prisma.stockAccount.findFirst({
-            where: { status: "available", productType },
-            orderBy: { createdAt: "asc" },
-          }) || await prisma.stockAccount.findFirst({
-            where: { status: "available" },
+            where: { status: "available", productType: targetSku },
             orderBy: { createdAt: "asc" },
           });
 
@@ -73,6 +86,36 @@ export async function GET(
                 data: { usedSlots: { increment: 1 }, status: newUsedSlots >= maxSlots ? "sold" : "in_use" },
               }),
             ]);
+
+            // Fire WA notification
+            if (transaction.user?.whatsapp) {
+              try {
+                const settingTemplate = await prisma.appSetting.findUnique({ where: { key: "template_payment_success" } });
+                if (settingTemplate && settingTemplate.value) {
+                  await sendTemplatedWhatsApp(
+                    transaction.user.whatsapp,
+                    settingTemplate.value,
+                    {
+                      nama: transaction.user.name,
+                      produk: transaction.productName,
+                      link_transaksi: `${process.env.NEXT_PUBLIC_BASE_URL || ""}/order/${transaction.id}`,
+                    }
+                  );
+                  await prisma.messageLog.create({
+                    data: {
+                      userId: transaction.userId,
+                      transactionId: transaction.id,
+                      whatsappNumber: transaction.user.whatsapp,
+                      messageType: "payment_success_notification",
+                      messageContent: `Sent order tracking link for: ${transaction.productName}`,
+                      status: "sent",
+                    },
+                  });
+                }
+              } catch (waErr) {
+                console.error("[Order Sync] WA notification failed:", waErr);
+              }
+            }
           } else {
             // Success but no stock
             await prisma.transaction.update({

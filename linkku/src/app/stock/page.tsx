@@ -271,13 +271,7 @@ export default function StockPage() {
   const [accounts, setAccounts] = useState<StockItem[]>([]);
   const [total, setTotal] = useState(0);
   const [statusCounts, setStatusCounts] = useState<Record<string, number>>({ available: 0, in_use: 0, sold: 0 });
-  const [mobileStatusCounts, setMobileStatusCounts] = useState<Record<string, number>>({ available: 0, in_use: 0, sold: 0 });
-  const [mobileTotal, setMobileTotal] = useState(0);
-  const [desktopStatusCounts, setDesktopStatusCounts] = useState<Record<string, number>>({ available: 0, in_use: 0, sold: 0 });
-  const [desktopTotal, setDesktopTotal] = useState(0);
-  const [remainingSlotsMobile, setRemainingSlotsMobile] = useState(0);
-  const [remainingSlotsDesktop, setRemainingSlotsDesktop] = useState(0);
-
+  const [remainingSlots, setRemainingSlots] = useState(0);
   // ── Product catalog state ──────────────────────────────────────────────────
   interface ProductItem {
     id: string; name: string; description: string; price: number;
@@ -305,7 +299,7 @@ export default function StockPage() {
       setProductTypeFilter("Semua");
     } else {
       setSelectedProduct(p);
-      setProductTypeFilter(p.type);
+      setProductTypeFilter(p.id);
     }
   }
 
@@ -383,19 +377,7 @@ export default function StockPage() {
         const sc: Record<string, number> = { available: 0, in_use: 0, sold: 0 };
         (json.statusCounts ? Object.entries(json.statusCounts) : []).forEach(([k, v]) => { sc[k] = v as number; });
         setStatusCounts(sc);
-
-        const msc: Record<string, number> = { available: 0, in_use: 0, sold: 0 };
-        (json.mobileStatusCounts ? Object.entries(json.mobileStatusCounts) : []).forEach(([k, v]) => { msc[k] = v as number; });
-        setMobileStatusCounts(msc);
-        setMobileTotal(json.mobileTotal ?? 0);
-
-        const dsc: Record<string, number> = { available: 0, in_use: 0, sold: 0 };
-        (json.desktopStatusCounts ? Object.entries(json.desktopStatusCounts) : []).forEach(([k, v]) => { dsc[k] = v as number; });
-        setDesktopStatusCounts(dsc);
-        setDesktopTotal(json.desktopTotal ?? 0);
-
-        setRemainingSlotsMobile(json.remainingSlotsMobile ?? 0);
-        setRemainingSlotsDesktop(json.remainingSlotsDesktop ?? 0);
+        setRemainingSlots(json.remainingSlots ?? 0);
       })
       .catch((err) => console.error(err))
       .finally(() => {
@@ -423,7 +405,7 @@ export default function StockPage() {
   }
 
   async function handleAddSingle() {
-    if (!singleForm.email || !singleForm.password) return;
+    if (!singleForm.email || !singleForm.password || !selectedProduct) return;
     setSubmitting(true);
     await fetch("/api/stock", {
       method: "POST",
@@ -432,17 +414,18 @@ export default function StockPage() {
         email: singleForm.email,
         password: singleForm.password,
         durationDays: singleForm.duration,
-        productType: singleForm.productType,
+        productType: selectedProduct.id,
         maxSlots: singleForm.maxSlots,
       }),
     });
     setSubmitting(false);
     setShowSingleModal(false);
-    setSingleForm({ email: "", password: "", duration: 30, productType: "mobile", maxSlots: 3 });
+    setSingleForm({ email: "", password: "", duration: 30, productType: "mobile", maxSlots: selectedProduct.type === "desktop" ? 2 : 3 });
     fetchData(1, false);
   }
 
   async function handleBulkImport() {
+    if (!selectedProduct) return;
     const lines = bulkText.split("\n").filter((l) => l.trim());
     const accounts = lines.map((line) => {
       const [email, password] = line.split(":").map((s) => s.trim());
@@ -453,7 +436,7 @@ export default function StockPage() {
     await fetch("/api/stock", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ accounts, durationDays: bulkDuration, productType: bulkProductType, maxSlots: bulkMaxSlots }),
+      body: JSON.stringify({ accounts, durationDays: bulkDuration, productType: selectedProduct.id, maxSlots: bulkMaxSlots }),
     });
     setSubmitting(false);
     setShowBulkModal(false);
@@ -467,13 +450,7 @@ export default function StockPage() {
     setTimeout(() => setCopiedId(null), 2000);
   }
 
-  function handleProductTypeChange(type: string) {
-    setSingleForm({ ...singleForm, productType: type, maxSlots: type === "desktop" ? 2 : 3 });
-  }
-  function handleBulkProductTypeChange(type: string) {
-    setBulkProductType(type);
-    setBulkMaxSlots(type === "desktop" ? 2 : 3);
-  }
+  // Handlers for modifying legacy state arrays removed 
 
   return (
     <>
@@ -503,8 +480,6 @@ export default function StockPage() {
                 const isSel = selectedProduct?.id === p.id;
                 const isMobile = p.type === "mobile";
                 const ac = isMobile ? "#22c55e" : "#3b82f6";
-                const slotsAvail = p.type === "mobile" ? remainingSlotsMobile : remainingSlotsDesktop;
-                const acctCount = p.type === "mobile" ? mobileTotal : desktopTotal;
                 return (
                   <div key={p.id} onClick={() => selectProduct(p)} className="glass-card p-4 cursor-pointer transition-all relative group" style={{ borderColor: isSel ? `${ac}80` : undefined, background: isSel ? `linear-gradient(135deg, ${ac}12, ${ac}06)` : undefined, boxShadow: isSel ? `0 0 0 2px ${ac}30` : undefined }}>
                     {p.popular && <span className="absolute -top-2 left-3 text-[9px] font-bold px-2 py-0.5 rounded-full uppercase" style={{ background: "linear-gradient(135deg,#6366f1,#8b5cf6)", color: "white", boxShadow: "0 2px 8px rgba(99,102,241,0.4)" }}>Best Seller</span>}
@@ -519,10 +494,6 @@ export default function StockPage() {
                       </div>
                     </div>
                     <p className="text-lg font-bold mt-1" style={{ color: ac }}>{formatCurrency(p.price)}</p>
-                    <div className="flex items-center justify-between mt-2 pt-2" style={{ borderTop: `1px solid ${ac}15` }}>
-                      <span className="text-[10px] text-[var(--text-muted)]">{acctCount} akun</span>
-                      <span className="text-[10px] font-bold" style={{ color: slotsAvail > 0 ? ac : "#ef4444" }}>{slotsAvail} slot tersedia</span>
-                    </div>
                   </div>
                 );
               })}
@@ -549,115 +520,9 @@ export default function StockPage() {
         {/* ── 3 Info Cards (Mobile, Desktop, Overall) ───────────────── */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
 
-          {/* Card 1 — Mobile */}
+          {/* Card Keseluruhan / Terpilih */}
           <div
-            className="glass-card p-4 flex flex-col gap-3 cursor-pointer transition-all"
-            style={{
-              borderColor: productTypeFilter === "mobile" ? "rgba(34,197,94,0.6)" : "rgba(34,197,94,0.25)",
-              background: productTypeFilter === "mobile"
-                ? "linear-gradient(135deg,rgba(34,197,94,0.12),rgba(16,185,129,0.08))"
-                : "linear-gradient(135deg,rgba(34,197,94,0.05),rgba(16,185,129,0.03))",
-              boxShadow: productTypeFilter === "mobile" ? "0 0 0 2px rgba(34,197,94,0.2)" : undefined,
-            }}
-            onClick={() => setProductTypeFilter(productTypeFilter === "mobile" ? "Semua" : "mobile")}
-            title="Klik untuk filter Mobile"
-          >
-            {/* Header */}
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-xl bg-green-500/15 flex items-center justify-center flex-shrink-0">
-                  <Smartphone size={16} className="text-green-400" />
-                </div>
-                <div>
-                  <p className="text-xs font-bold text-green-400 uppercase tracking-wider">Akun Mobile</p>
-                  <p className="text-[10px] text-[var(--text-muted)]">HP / iPad / Tablet</p>
-                </div>
-              </div>
-              <span
-                className="text-xs font-bold px-2 py-0.5 rounded-lg"
-                style={{ background: "rgba(34,197,94,0.12)", color: "#22c55e" }}
-              >
-                {mobileTotal} Akun
-              </span>
-            </div>
-            {/* Stats row */}
-            <div className="grid grid-cols-3 gap-2 pt-1 border-t border-green-500/10">
-              <div className="text-center">
-                <p className="text-xl font-bold text-emerald-400">{mobileStatusCounts.available || 0}</p>
-                <p className="text-[10px] text-[var(--text-muted)] mt-0.5">Tersedia</p>
-              </div>
-              <div className="text-center border-x border-green-500/10">
-                <p className="text-xl font-bold text-cyan-400">{mobileStatusCounts.in_use || 0}</p>
-                <p className="text-[10px] text-[var(--text-muted)] mt-0.5">Digunakan</p>
-              </div>
-              <div className="text-center">
-                <p className="text-xl font-bold text-slate-400">{mobileStatusCounts.sold || 0}</p>
-                <p className="text-[10px] text-[var(--text-muted)] mt-0.5">Sold</p>
-              </div>
-            </div>
-            {/* Slot info */}
-            <div className="flex items-center justify-between pt-1 border-t border-green-500/10">
-              <span className="text-[10px] text-[var(--text-muted)]">Sisa Slot Tersedia</span>
-              <span className="text-sm font-bold text-green-400">{remainingSlotsMobile} slot</span>
-            </div>
-          </div>
-
-          {/* Card 2 — Desktop */}
-          <div
-            className="glass-card p-4 flex flex-col gap-3 cursor-pointer transition-all"
-            style={{
-              borderColor: productTypeFilter === "desktop" ? "rgba(59,130,246,0.6)" : "rgba(59,130,246,0.25)",
-              background: productTypeFilter === "desktop"
-                ? "linear-gradient(135deg,rgba(59,130,246,0.12),rgba(99,102,241,0.08))"
-                : "linear-gradient(135deg,rgba(59,130,246,0.05),rgba(99,102,241,0.03))",
-              boxShadow: productTypeFilter === "desktop" ? "0 0 0 2px rgba(59,130,246,0.2)" : undefined,
-            }}
-            onClick={() => setProductTypeFilter(productTypeFilter === "desktop" ? "Semua" : "desktop")}
-            title="Klik untuk filter Desktop"
-          >
-            {/* Header */}
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-xl bg-blue-500/15 flex items-center justify-center flex-shrink-0">
-                  <Monitor size={16} className="text-blue-400" />
-                </div>
-                <div>
-                  <p className="text-xs font-bold text-blue-400 uppercase tracking-wider">Akun Desktop</p>
-                  <p className="text-[10px] text-[var(--text-muted)]">Laptop / Mac / PC</p>
-                </div>
-              </div>
-              <span
-                className="text-xs font-bold px-2 py-0.5 rounded-lg"
-                style={{ background: "rgba(59,130,246,0.12)", color: "#60a5fa" }}
-              >
-                {desktopTotal} Akun
-              </span>
-            </div>
-            {/* Stats row */}
-            <div className="grid grid-cols-3 gap-2 pt-1 border-t border-blue-500/10">
-              <div className="text-center">
-                <p className="text-xl font-bold text-emerald-400">{desktopStatusCounts.available || 0}</p>
-                <p className="text-[10px] text-[var(--text-muted)] mt-0.5">Tersedia</p>
-              </div>
-              <div className="text-center border-x border-blue-500/10">
-                <p className="text-xl font-bold text-cyan-400">{desktopStatusCounts.in_use || 0}</p>
-                <p className="text-[10px] text-[var(--text-muted)] mt-0.5">Digunakan</p>
-              </div>
-              <div className="text-center">
-                <p className="text-xl font-bold text-slate-400">{desktopStatusCounts.sold || 0}</p>
-                <p className="text-[10px] text-[var(--text-muted)] mt-0.5">Sold</p>
-              </div>
-            </div>
-            {/* Slot info */}
-            <div className="flex items-center justify-between pt-1 border-t border-blue-500/10">
-              <span className="text-[10px] text-[var(--text-muted)]">Sisa Slot Tersedia</span>
-              <span className="text-sm font-bold text-blue-400">{remainingSlotsDesktop} slot</span>
-            </div>
-          </div>
-
-          {/* Card 3 — Overall / Keseluruhan */}
-          <div
-            className="glass-card p-4 flex flex-col gap-3"
+            className="col-span-1 sm:col-span-3 glass-card p-4 flex flex-col gap-3"
             style={{ borderColor: "rgba(129,140,248,0.25)", background: "linear-gradient(135deg,rgba(129,140,248,0.06),rgba(99,102,241,0.03))" }}
           >
             {/* Header */}
@@ -667,8 +532,8 @@ export default function StockPage() {
                   <LayoutGrid size={16} className="text-indigo-400" />
                 </div>
                 <div>
-                  <p className="text-xs font-bold text-indigo-400 uppercase tracking-wider">Keseluruhan</p>
-                  <p className="text-[10px] text-[var(--text-muted)]">Semua tipe akun</p>
+                  <p className="text-xs font-bold text-indigo-400 uppercase tracking-wider">Status Akun</p>
+                  <p className="text-[10px] text-[var(--text-muted)]">{selectedProduct ? `Filter: ${selectedProduct.name}` : "Keseluruhan Produk"}</p>
                 </div>
               </div>
               <span
@@ -696,7 +561,7 @@ export default function StockPage() {
             {/* Slot total info */}
             <div className="flex items-center justify-between pt-1 border-t border-indigo-500/10">
               <span className="text-[10px] text-[var(--text-muted)]">Total Slot Kosong</span>
-              <span className="text-sm font-bold text-indigo-400">{remainingSlotsMobile + remainingSlotsDesktop} slot</span>
+              <span className="text-sm font-bold text-indigo-400">{remainingSlots} slot</span>
             </div>
           </div>
 
@@ -710,35 +575,19 @@ export default function StockPage() {
               <Search size={16} className="search-icon" />
               <input type="text" placeholder="Cari email akun..." className="form-input !pl-10" value={search} onChange={(e) => setSearch(e.target.value)} />
             </div>
-            <div className="flex gap-2 ml-auto">
-              <button className="btn-secondary" onClick={() => setShowBulkModal(true)}><Upload size={16} /> <span className="hidden sm:inline">Bulk Import</span></button>
-              <button className="btn-primary" onClick={() => setShowSingleModal(true)}><Plus size={16} /> <span className="hidden sm:inline">Tambah Akun</span></button>
+            <div className="flex items-center gap-2 ml-auto">
+              {!selectedProduct && (
+                <span className="text-xs text-[var(--text-muted)] italic mr-2 hidden sm:inline">
+                  Pilih produk dulu untuk tambah akun
+                </span>
+              )}
+              <button className="btn-secondary" onClick={() => { setBulkMaxSlots(selectedProduct?.type === "desktop" ? 2 : 3); setShowBulkModal(true); }} disabled={!selectedProduct}><Upload size={16} /> <span className="hidden sm:inline">Bulk Import</span></button>
+              <button className="btn-primary" onClick={() => { setSingleForm({ ...singleForm, maxSlots: selectedProduct?.type === "desktop" ? 2 : 3 }); setShowSingleModal(true); }} disabled={!selectedProduct}><Plus size={16} /> <span className="hidden sm:inline">Tambah Akun</span></button>
             </div>
           </div>
-          {/* Row 2: Filter tipe produk */}
+          {/* Row 2: Status Filters */}
           <div className="filter-pills-scroll">
             <div className="filter-pills flex-nowrap">
-              <button
-                className={`filter-pill flex-shrink-0 flex items-center gap-1.5 ${productTypeFilter === "Semua" ? "active" : ""}`}
-                onClick={() => setProductTypeFilter("Semua")}
-              >
-                <LayoutGrid size={12} /> Semua Tipe
-              </button>
-              <button
-                className={`filter-pill flex-shrink-0 flex items-center gap-1.5 ${productTypeFilter === "mobile" ? "active" : ""}`}
-                style={productTypeFilter === "mobile" ? { background: "rgba(34,197,94,0.15)", borderColor: "rgba(34,197,94,0.4)", color: "#22c55e" } : {}}
-                onClick={() => setProductTypeFilter(productTypeFilter === "mobile" ? "Semua" : "mobile")}
-              >
-                <Smartphone size={12} /> Mobile
-              </button>
-              <button
-                className={`filter-pill flex-shrink-0 flex items-center gap-1.5 ${productTypeFilter === "desktop" ? "active" : ""}`}
-                style={productTypeFilter === "desktop" ? { background: "rgba(59,130,246,0.15)", borderColor: "rgba(59,130,246,0.4)", color: "#60a5fa" } : {}}
-                onClick={() => setProductTypeFilter(productTypeFilter === "desktop" ? "Semua" : "desktop")}
-              >
-                <Monitor size={12} /> Desktop
-              </button>
-              <div className="w-px h-4 bg-[var(--border-color)] self-center mx-1 flex-shrink-0" />
               {statusFilters.map((f) => (
                 <button key={f} className={`filter-pill flex-shrink-0 ${statusFilter === f ? "active" : ""}`} onClick={() => setStatusFilter(f)}>
                   {statusLabels[f]}
@@ -952,18 +801,9 @@ export default function StockPage() {
             <div className="modal-body space-y-4">
               <div><label className="form-label">Email Akun</label><input type="email" className="form-input" placeholder="email@capcut.com" value={singleForm.email} onChange={(e) => setSingleForm({ ...singleForm, email: e.target.value })} /></div>
               <div><label className="form-label">Password Akun</label><input type="text" className="form-input" placeholder="Masukkan password" value={singleForm.password} onChange={(e) => setSingleForm({ ...singleForm, password: e.target.value })} /></div>
-              <div>
-                <label className="form-label">Tipe Produk</label>
-                <div className="flex gap-2">
-                  <button type="button" onClick={() => handleProductTypeChange("mobile")}
-                    className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-medium border transition-all ${singleForm.productType === "mobile" ? "border-green-500 bg-green-500/15 text-green-400" : "border-[rgba(255,255,255,0.1)] text-[var(--text-muted)] hover:border-[rgba(255,255,255,0.2)]"}`}>
-                    <Smartphone size={16} /> HP/iPad/Tablet
-                  </button>
-                  <button type="button" onClick={() => handleProductTypeChange("desktop")}
-                    className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-medium border transition-all ${singleForm.productType === "desktop" ? "border-blue-500 bg-blue-500/15 text-blue-400" : "border-[rgba(255,255,255,0.1)] text-[var(--text-muted)] hover:border-[rgba(255,255,255,0.2)]"}`}>
-                    <Monitor size={16} /> Laptop/Mac/Desktop
-                  </button>
-                </div>
+              <div className="p-3 rounded-lg bg-[rgba(255,255,255,0.05)] border border-[rgba(255,255,255,0.1)]">
+                <p className="text-xs text-[var(--text-muted)] mb-1">Target Produk:</p>
+                <p className="text-sm font-semibold text-white">{selectedProduct?.name} <span className="text-[10px] bg-[rgba(255,255,255,0.1)] px-1.5 py-0.5 rounded ml-1 font-mono">{selectedProduct?.id}</span></p>
               </div>
               <div>
                 <label className="form-label">Slot Pengguna</label>
@@ -1000,18 +840,9 @@ export default function StockPage() {
             <div className="modal-body space-y-4">
               <p className="text-sm text-[var(--text-secondary)]">Paste daftar akun dengan format: <code className="text-[#818cf8]">email:password</code> (satu per baris)</p>
               <div><label className="form-label">Daftar Akun</label><textarea className="form-input" rows={8} placeholder={"akun1@mail.com:password1\nakun2@mail.com:password2"} value={bulkText} onChange={(e) => setBulkText(e.target.value)} /></div>
-              <div>
-                <label className="form-label">Tipe Produk</label>
-                <div className="flex gap-2">
-                  <button type="button" onClick={() => handleBulkProductTypeChange("mobile")}
-                    className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-medium border transition-all ${bulkProductType === "mobile" ? "border-green-500 bg-green-500/15 text-green-400" : "border-[rgba(255,255,255,0.1)] text-[var(--text-muted)]"}`}>
-                    <Smartphone size={16} /> HP/iPad/Tablet
-                  </button>
-                  <button type="button" onClick={() => handleBulkProductTypeChange("desktop")}
-                    className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-medium border transition-all ${bulkProductType === "desktop" ? "border-blue-500 bg-blue-500/15 text-blue-400" : "border-[rgba(255,255,255,0.1)] text-[var(--text-muted)]"}`}>
-                    <Monitor size={16} /> Laptop/Mac/Desktop
-                  </button>
-                </div>
+              <div className="p-3 rounded-lg bg-[rgba(255,255,255,0.05)] border border-[rgba(255,255,255,0.1)]">
+                <p className="text-xs text-[var(--text-muted)] mb-1">Target Produk:</p>
+                <p className="text-sm font-semibold text-white">{selectedProduct?.name} <span className="text-[10px] bg-[rgba(255,255,255,0.1)] px-1.5 py-0.5 rounded ml-1 font-mono">{selectedProduct?.id}</span></p>
               </div>
               <div>
                 <label className="form-label">Slot Pengguna</label>

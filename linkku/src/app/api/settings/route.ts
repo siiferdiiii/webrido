@@ -15,6 +15,15 @@ Balas pesan ini atau hubungi kami untuk info lebih lanjut ya!
 
 Terima kasih sudah bersama kami 🙏`,
 
+  template_payment_success: `Halo {{nama}} 👋
+
+Pesanan kamu untuk {{produk}} berhasil diproses! 🎉
+
+Silakan lihat detail akun pesanan kamu pada link transaksi berikut ini:
+{{link_transaksi}}
+
+Jika kamu lupa cara login, jangan ragu untuk menghubungi tim kami ya! 🙏`,
+
   template_send_account: `Halo {{nama}} 👋
 
 Terima kasih sudah berlangganan di Dorizz Store! Berikut adalah data akun kamu:

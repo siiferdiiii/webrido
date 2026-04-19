@@ -5,6 +5,7 @@ import {
   isPaymentSuccess,
   isPaymentFailed,
 } from "@/lib/midtrans";
+import { sendTemplatedWhatsApp } from "@/lib/mpwa";
 
 // POST /api/webhook/midtrans — Handle Midtrans payment notifications
 export async function POST(req: NextRequest) {
@@ -56,24 +57,33 @@ export async function POST(req: NextRequest) {
         },
       });
 
-      // Detect product type from productName
-      const productName = (transaction.productName || "").toLowerCase();
-      const isDesktop = productName.includes("desktop") || productName.includes("pc") || productName.includes("mac");
-      const productType = isDesktop ? "desktop" : "mobile";
-
-      // Auto-assign stock account matching product type
+      // Fetch products to map productName -> SKU
+      let targetSku = null;
       try {
-        const availableStock = await prisma.stockAccount.findFirst({
+        const setting = await prisma.appSetting.findUnique({ where: { key: "products" } });
+        if (setting && setting.value) {
+          const products = JSON.parse(setting.value);
+          const matched = products.find((p: any) => p.name.toLowerCase() === (transaction.productName || "").toLowerCase());
+          if (matched) targetSku = matched.id;
+        }
+      } catch (e) {
+        console.error("[Midtrans Webhook] Error fetching products for SKU mapping:", e);
+      }
+
+      // If SKU is not resolved, fallback to the old fuzzy logic for backward compatibility
+      if (!targetSku) {
+        const productName = (transaction.productName || "").toLowerCase();
+        const isDesktop = productName.includes("desktop") || productName.includes("pc") || productName.includes("mac");
+        targetSku = isDesktop ? "desktop" : "mobile";
+      }
+
+      // Auto-assign stock account strictly matching product SKU/Type
+      try {
+        const stock = await prisma.stockAccount.findFirst({
           where: {
             status: "available",
-            productType,
+            productType: targetSku,
           },
-          orderBy: { createdAt: "asc" },
-        });
-
-        // Fallback: if no matching type, try any available
-        const stock = availableStock || await prisma.stockAccount.findFirst({
-          where: { status: "available" },
           orderBy: { createdAt: "asc" },
         });
 
@@ -103,6 +113,36 @@ export async function POST(req: NextRequest) {
           ]);
 
           console.log(`[Midtrans Webhook] Auto-assigned ${stock.accountEmail} (${stock.productType}) to ${order_id}`);
+
+          // Fire WA notification
+          if (transaction.user?.whatsapp) {
+            try {
+              const settingTemplate = await prisma.appSetting.findUnique({ where: { key: "template_payment_success" } });
+              if (settingTemplate && settingTemplate.value) {
+                await sendTemplatedWhatsApp(
+                  transaction.user.whatsapp,
+                  settingTemplate.value,
+                  {
+                    nama: transaction.user.name,
+                    produk: transaction.productName,
+                    link_transaksi: `${process.env.NEXT_PUBLIC_BASE_URL || ""}/order/${transaction.id}`,
+                  }
+                );
+                await prisma.messageLog.create({
+                  data: {
+                    userId: transaction.user.id,
+                    transactionId: transaction.id,
+                    whatsappNumber: transaction.user.whatsapp,
+                    messageType: "payment_success_notification",
+                    messageContent: `Sent order tracking link for: ${transaction.productName}`,
+                    status: "sent",
+                  },
+                });
+              }
+            } catch (waErr) {
+              console.error("[Midtrans Webhook] WA notification failed:", waErr);
+            }
+          }
         } else {
           console.log(`[Midtrans Webhook] No available stock for ${order_id} — admin needs to assign manually`);
         }

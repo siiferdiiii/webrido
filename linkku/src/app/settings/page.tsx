@@ -38,6 +38,7 @@ interface AppSettings {
   template_warranty: string;
   template_promo: string;
   template_wa_expired: string;
+  template_payment_success: string;
 }
 
 interface TagItem {
@@ -72,6 +73,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   template_warranty: "",
   template_promo: "",
   template_wa_expired: "",
+  template_payment_success: "",
 };
 
 // ─── Template Metadata ───────────────────────────────────────────────────────
@@ -85,6 +87,19 @@ const TEMPLATE_TABS = [
     description: "Pesan yang dikirim saat follow-up terjadwal berjalan",
     variables: ["{{nama}}", "{{email}}", "{{wa}}"],
     preview: { nama: "Kasmawati", email: "kas@gmail.com", wa: "085212345678" },
+  },
+  {
+    key: "template_payment_success" as keyof AppSettings,
+    label: "Pesanan Sukses",
+    icon: ShoppingBag,
+    color: "#8b5cf6",
+    description: "Pesan WA notifikasi saat pesanan sukses dan stok di-assign",
+    variables: ["{{nama}}", "{{produk}}", "{{link_transaksi}}"],
+    preview: {
+      nama: "Kasmawati",
+      produk: "CapCut Pro 30 Hari",
+      link_transaksi: "https://dorizz.store/order/12345",
+    },
   },
   {
     key: "template_send_account" as keyof AppSettings,

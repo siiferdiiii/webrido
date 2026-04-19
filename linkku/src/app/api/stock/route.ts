@@ -27,7 +27,7 @@ export async function GET(req: NextRequest) {
     if (productType && productType !== "all") where.productType = productType;
 
     // ── Fetch semua data yang diperlukan ─────────────────────────────────────
-    const [accounts, total, allMobileRaw, allDesktopRaw] = await Promise.all([
+    const [accounts, total, allRawStats] = await Promise.all([
       prisma.stockAccount.findMany({
         where,
         include: {
@@ -48,14 +48,9 @@ export async function GET(req: NextRequest) {
         take: limit,
       }),
       prisma.stockAccount.count({ where }),
-      // Semua akun mobile (untuk stats akurat)
+      // Semua akun yang sesuai filter (untuk stats akurat)
       prisma.stockAccount.findMany({
-        where: { productType: "mobile" },
-        select: { id: true, status: true, usedSlots: true, maxSlots: true },
-      }),
-      // Semua akun desktop (untuk stats akurat)
-      prisma.stockAccount.findMany({
-        where: { productType: "desktop" },
+        where,
         select: { id: true, status: true, usedSlots: true, maxSlots: true },
       }),
     ]);
@@ -69,13 +64,10 @@ export async function GET(req: NextRequest) {
     }
 
     // ── Auto-fix background: update status akun yang stale (in_use tapi slot penuh) ──
-    const staleMobileIds = allMobileRaw
+    const staleIds = allRawStats
       .filter(a => a.status === "in_use" && (a.usedSlots ?? 0) >= (a.maxSlots ?? 3))
       .map(a => a.id);
-    const staleDesktopIds = allDesktopRaw
-      .filter(a => a.status === "in_use" && (a.usedSlots ?? 0) >= (a.maxSlots ?? 2))
-      .map(a => a.id);
-    const staleIds = [...staleMobileIds, ...staleDesktopIds];
+      
     if (staleIds.length > 0) {
       // Fire-and-forget: jangan await agar tidak lambat response
       prisma.stockAccount.updateMany({
@@ -84,47 +76,24 @@ export async function GET(req: NextRequest) {
       }).catch(e => console.error("[stock] auto-fix stale status error:", e));
     }
 
-    // ── Hitung stats Mobile (akurat berdasarkan usedSlots vs maxSlots) ──────
-    const mobileStatusCounts: Record<string, number> = { available: 0, in_use: 0, sold: 0 };
-    for (const acc of allMobileRaw) {
-      const eff = effectiveStatus(acc, 3);
-      if (eff === "available") mobileStatusCounts.available++;
-      else if (eff === "in_use") mobileStatusCounts.in_use++;
-      else mobileStatusCounts.sold++; // sold, full, full_stale, banned, expired
+    // ── Hitung stats Keseluruhan ──────────────────────────────────────────
+    const statusCounts: Record<string, number> = { available: 0, in_use: 0, sold: 0 };
+    for (const acc of allRawStats) {
+      const eff = effectiveStatus(acc, acc.maxSlots ?? 3);
+      if (eff === "available") statusCounts.available++;
+      else if (eff === "in_use") statusCounts.in_use++;
+      else statusCounts.sold++; // sold, full, full_stale, banned, expired
     }
-    const mobileTotal = allMobileRaw.length;
-
-    // ── Hitung stats Desktop (akurat berdasarkan usedSlots vs maxSlots) ─────
-    const desktopStatusCounts: Record<string, number> = { available: 0, in_use: 0, sold: 0 };
-    for (const acc of allDesktopRaw) {
-      const eff = effectiveStatus(acc, 2);
-      if (eff === "available") desktopStatusCounts.available++;
-      else if (eff === "in_use") desktopStatusCounts.in_use++;
-      else desktopStatusCounts.sold++;
-    }
-    const desktopTotal = allDesktopRaw.length;
-
-    // ── Overall (gabungan) ────────────────────────────────────────────────────
-    const statusCounts: Record<string, number> = {
-      available: mobileStatusCounts.available + desktopStatusCounts.available,
-      in_use: mobileStatusCounts.in_use + desktopStatusCounts.in_use,
-      sold: mobileStatusCounts.sold + desktopStatusCounts.sold,
-    };
 
     // ── Sisa slot (hanya dari akun yang benar-benar masih ada kapasitas) ─────
-    const remainingSlotsMobile = allMobileRaw.reduce((sum, acc) => {
+    const remainingSlots = allRawStats.reduce((sum, acc) => {
       return sum + Math.max(0, (acc.maxSlots ?? 3) - (acc.usedSlots ?? 0));
-    }, 0);
-    const remainingSlotsDesktop = allDesktopRaw.reduce((sum, acc) => {
-      return sum + Math.max(0, (acc.maxSlots ?? 2) - (acc.usedSlots ?? 0));
     }, 0);
 
     return NextResponse.json({
       accounts, total, page, limit,
       statusCounts,
-      mobileStatusCounts, mobileTotal,
-      desktopStatusCounts, desktopTotal,
-      remainingSlotsMobile, remainingSlotsDesktop,
+      remainingSlots,
     });
   } catch (error) {
     console.error("GET /api/stock error:", error);
