@@ -122,6 +122,11 @@ export default function OrderDetailPage() {
       const res = await fetch(`/api/order/${id}/affiliate`, { method: "POST" });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
+      
+      if (data.password) {
+        alert(`Berhasil membuat akun Affiliate!\n\nEmail: ${order?.user?.email}\nPassword: ${data.password}\n\nHarap simpan password ini (default menggunakan nomor WA) untuk login di perangkat lain nanti.`);
+      }
+      
       if (data.redirect) window.location.href = data.redirect;
     } catch (e: any) {
       alert("Gagal mengaktifkan affiliate: " + e.message);

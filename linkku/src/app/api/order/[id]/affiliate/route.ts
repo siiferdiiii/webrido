@@ -24,10 +24,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       where: { email: emailStr },
     });
 
+    let generatedPassword = "";
+
     if (!affiliate) {
       // Auto-create affiliate khusus dari halaman order dengan komisi default 20%
-      const randomPassword = Math.random().toString(36).slice(-8); // Generate 8 char password
-      const hashedPassword = await hashPassword(randomPassword);
+      generatedPassword = transaction.user.whatsapp || Math.random().toString(36).slice(-8); // Default password: nomor WA
+      const hashedPassword = await hashPassword(generatedPassword);
       
       affiliate = await prisma.affiliate.create({
         data: {
@@ -62,6 +64,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json({
       success: true,
       redirect: "/affiliate/",
+      password: generatedPassword || null
     });
   } catch (error) {
     console.error("Auto Affiliate POST error:", error);
