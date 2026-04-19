@@ -36,6 +36,7 @@ interface WarrantyItem {
     id: string;
     lynkIdRef: string | null;
     user: { id: string; name: string; whatsapp: string | null } | null;
+    warrantyClaims?: { id: string }[];
   } | null;
   oldAccount: { accountEmail: string } | null;
   newAccount: { accountEmail: string; accountPassword: string } | null;
@@ -204,9 +205,14 @@ export default function WarrantyPage() {
                     <tbody>
                       {claims.length===0 ? (
                         <tr><td colSpan={6} className="text-center py-8 text-[var(--text-muted)]">Belum ada klaim garansi</td></tr>
-                      ) : claims.map((claim)=>(
+                      ) : claims.map((claim)=>{
+                        const claimIndex = claim.transaction?.warrantyClaims ? claim.transaction.warrantyClaims.findIndex(c => c.id === claim.id) + 1 : 0;
+                        return (
                         <tr key={claim.id}>
-                          <td className="font-mono text-sm text-[#818cf8]">{claim.transaction?.lynkIdRef||claim.transaction?.id?.substring(0,8)||"-"}</td>
+                          <td className="font-mono text-sm text-[#818cf8]">
+                            {claim.transaction?.lynkIdRef||claim.transaction?.id?.substring(0,8)||"-"}
+                            {claimIndex > 0 && <span className="block mt-1 text-[10px] bg-[rgba(99,102,241,0.15)] text-[#a5b4fc] px-1.5 py-0.5 rounded w-max border border-[rgba(99,102,241,0.2)]">Klaim ke-{claimIndex}</span>}
+                          </td>
                           <td><p className="font-medium">{claim.transaction?.user?.name||"-"}</p><p className="text-xs text-[var(--text-muted)]">{maskPhone(claim.transaction?.user?.whatsapp)}</p></td>
                           <td>
                             <div className="flex items-center gap-1.5 text-xs">
@@ -231,14 +237,16 @@ export default function WarrantyPage() {
                             </div>
                           </td>
                         </tr>
-                      ))}
+                      )})}
                     </tbody>
                   </table>
                 </div>
               )}
               {viewMode==='card' && (
                 <div className="data-card-grid">
-                  {claims.length===0 ? <p className="text-center py-8 text-[var(--text-muted)]">Belum ada klaim garansi</p> : claims.map((claim)=>(
+                  {claims.length===0 ? <p className="text-center py-8 text-[var(--text-muted)]">Belum ada klaim garansi</p> : claims.map((claim)=>{
+                    const claimIndex = claim.transaction?.warrantyClaims ? claim.transaction.warrantyClaims.findIndex(c => c.id === claim.id) + 1 : 0;
+                    return (
                     <div key={claim.id} className="data-card">
                       <div className="flex items-start justify-between mb-3">
                         <div className="min-w-0 flex-1 mr-2">
@@ -255,17 +263,19 @@ export default function WarrantyPage() {
                               <User size={12} /> Cek User
                             </button>
                           )}
+                          {getClaimBadge(claim.status)}
                         </div>
                       </div>
                       <div className="space-y-1.5 pt-2.5 border-t border-[rgba(99,102,241,0.08)]">
                         <div className="data-card-row"><span className="data-card-label">ID Transaksi</span><span className="data-card-value font-mono text-xs text-[#818cf8]">{claim.transaction?.lynkIdRef||claim.transaction?.id?.substring(0,8)||"-"}</span></div>
+                        <div className="data-card-row"><span className="data-card-label">Urutan</span><span className="data-card-value">Klaim ke-{claimIndex > 0 ? claimIndex : "-"}</span></div>
                         <div className="data-card-row"><span className="data-card-label">Akun Lama</span><span className="data-card-value font-mono text-xs text-rose-400">{claim.oldAccount?.accountEmail||"—"}</span></div>
                         <div className="data-card-row"><span className="data-card-label">Akun Baru</span><span className="data-card-value font-mono text-xs text-emerald-400">{claim.newAccount?.accountEmail||"—"}</span></div>
                         <div className="data-card-row"><span className="data-card-label">Alasan</span><span className="data-card-value">{claim.claimReason||"-"}</span></div>
                         <div className="data-card-row"><span className="data-card-label">Tanggal</span><span className="data-card-value">{claim.createdAt?new Date(claim.createdAt).toLocaleDateString("id-ID"):"-"}</span></div>
                       </div>
                     </div>
-                  ))}
+                  )})}
                 </div>
               )}
               <div className="px-4 md:px-6 py-4 border-t border-[rgba(99,102,241,0.08)]">

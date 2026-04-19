@@ -52,7 +52,10 @@ export async function GET(req: NextRequest) {
         where,
         include: {
           transaction: {
-            include: { user: { select: { id: true, name: true, whatsapp: true } } },
+            include: { 
+              user: { select: { id: true, name: true, whatsapp: true } },
+              warrantyClaims: { select: { id: true }, orderBy: { createdAt: "asc" } }
+            },
           },
           oldAccount: { select: { accountEmail: true } },
           newAccount: { select: { accountEmail: true, accountPassword: true } },

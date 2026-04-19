@@ -227,8 +227,28 @@ export default function OrderDetailPage() {
           <div style={{ ...styles.card, border: "1px solid rgba(16, 185, 129, 0.25)" }}>
             <div style={styles.cardHeader}>
               <Lock size={16} color="#34d399" />
-              <span style={{ fontSize: 14, fontWeight: 600, color: "#6ee7b7" }}>Akun Kamu</span>
+              <span style={{ fontSize: 14, fontWeight: 600, color: "#6ee7b7" }}>Akun Kamu {order.warrantyClaims.some(c => c.status === "resolved") && "(Terbaru)"}</span>
             </div>
+            
+            {order.warrantyClaims.filter(c => c.status === "resolved").map((claim) => claim.oldAccount ? (
+              <div key={claim.id} style={{ marginBottom: 16 }}>
+                <div style={{ ...styles.credentialRow, border: "1px dashed rgba(244,63,94,0.3)", borderBottom: "none", borderRadius: "12px 12px 0 0", background: "rgba(244,63,94,0.05)" }}>
+                  <div>
+                    <span style={{ fontSize: 11, color: "#fb7185", display: "block", marginBottom: 2 }}>Email Lama (Diganti)</span>
+                    <span style={{ fontSize: 14, color: "#fb7185", textDecoration: "line-through", opacity: 0.8 }}>{claim.oldAccount.email}</span>
+                  </div>
+                </div>
+                <div style={{ ...styles.credentialRow, border: "1px dashed rgba(244,63,94,0.3)", borderRadius: "0 0 12px 12px", background: "rgba(244,63,94,0.05)" }}>
+                  <div>
+                    <span style={{ fontSize: 11, color: "#fb7185", display: "block", marginBottom: 2 }}>Password Lama</span>
+                    <span style={{ fontSize: 14, color: "#fb7185", fontFamily: "monospace", textDecoration: "line-through", opacity: 0.8 }}>
+                      {claim.oldAccount.password}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            ) : null)}
+
             <div style={styles.credentialRow}>
               <div>
                 <span style={{ fontSize: 11, color: "#64748b", display: "block" }}>Email</span>
