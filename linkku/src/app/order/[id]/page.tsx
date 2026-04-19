@@ -124,7 +124,7 @@ export default function OrderDetailPage() {
       if (!res.ok) throw new Error(data.error);
       
       if (data.password) {
-        alert(`Berhasil membuat akun Affiliate!\n\nEmail: ${order?.user?.email}\nPassword: ${data.password}\n\nHarap simpan password ini (default menggunakan nomor WA) untuk login di perangkat lain nanti.`);
+        alert(`Berhasil membuat akun Affiliate!\n\nEmail: ${order?.customer?.email}\nPassword: ${data.password}\n\nHarap simpan password ini (default menggunakan nomor WA) untuk login di perangkat lain nanti.`);
       }
       
       if (data.redirect) window.location.href = data.redirect;
