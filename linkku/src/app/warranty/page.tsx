@@ -398,6 +398,11 @@ export default function WarrantyPage() {
                             ) : (
                               <span className="text-[10px] text-[var(--text-muted)]">Tidak ada pending</span>
                             )}
+                            {trx.warrantyClaims && trx.warrantyClaims.length > 0 && (
+                              <span className="block mt-1.5 text-[10px] bg-[rgba(99,102,241,0.15)] text-[#a5b4fc] px-1.5 py-0.5 rounded w-max border border-[rgba(99,102,241,0.2)]">
+                                {trx.warrantyClaims.length}x Klaim
+                              </span>
+                            )}
                           </td>
                         </tr>
                       )})}
