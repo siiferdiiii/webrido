@@ -64,28 +64,14 @@ export async function GET(req: NextRequest) {
       return "sold";
     }
 
-<<<<<<< HEAD:linkku/src/app/api/stock/route.ts
     // ── Auto-fix background: update status akun yang stale (in_use tapi slot penuh) ──
     const staleIds = allRawStats
       .filter(a => a.status === "in_use" && (a.usedSlots ?? 0) >= (a.maxSlots ?? 3))
       .map(a => a.id);
       
-=======
-    // ── Auto-fix background: update status akun yang stale (in_use/full → available/sold) ──
-    const staleIds = [...allMobileRaw, ...allDesktopRaw]
-      .filter(a => {
-        const defaultMax = a.status === "desktop" ? 2 : 3;
-        const used = a.usedSlots ?? 0;
-        const max = a.maxSlots ?? defaultMax;
-        const correctStatus = used < max ? "available" : "sold";
-        return a.status !== correctStatus; // status di DB tidak sesuai
-      })
-      .map(a => a.id);
-
->>>>>>> 6a3f9939c61eb1eb87c7a49424db2272b0dc9d47:capcut-pro-dashboard/src/app/api/stock/route.ts
     if (staleIds.length > 0) {
       // Fix akun yang harusnya available (masih ada slot kosong)
-      const shouldBeAvailable = [...allMobileRaw, ...allDesktopRaw]
+      const shouldBeAvailable = allRawStats
         .filter(a => staleIds.includes(a.id) && (a.usedSlots ?? 0) < (a.maxSlots ?? 3))
         .map(a => a.id);
       const shouldBeSold = staleIds.filter(id => !shouldBeAvailable.includes(id));
@@ -104,13 +90,11 @@ export async function GET(req: NextRequest) {
       }
     }
 
-<<<<<<< HEAD:linkku/src/app/api/stock/route.ts
     // ── Hitung stats Keseluruhan ──────────────────────────────────────────
-    const statusCounts: Record<string, number> = { available: 0, in_use: 0, sold: 0 };
+    const statusCounts: Record<string, number> = { available: 0, sold: 0 };
     for (const acc of allRawStats) {
       const eff = effectiveStatus(acc, acc.maxSlots ?? 3);
       if (eff === "available") statusCounts.available++;
-      else if (eff === "in_use") statusCounts.in_use++;
       else statusCounts.sold++; // sold, full, full_stale, banned, expired
     }
 
@@ -118,43 +102,6 @@ export async function GET(req: NextRequest) {
     const remainingSlots = allRawStats.reduce((sum, acc) => {
       return sum + Math.max(0, (acc.maxSlots ?? 3) - (acc.usedSlots ?? 0));
     }, 0);
-=======
-    // ── Hitung stats Mobile (berdasarkan usedSlots vs maxSlots) ──────
-    const mobileStatusCounts: Record<string, number> = { available: 0, sold: 0 };
-    for (const acc of allMobileRaw) {
-      const eff = effectiveStatus(acc, 3);
-      if (eff === "available") mobileStatusCounts.available++;
-      else mobileStatusCounts.sold++;
-    }
-    const mobileTotal = allMobileRaw.length;
-
-    // ── Hitung stats Desktop (berdasarkan usedSlots vs maxSlots) ─────
-    const desktopStatusCounts: Record<string, number> = { available: 0, sold: 0 };
-    for (const acc of allDesktopRaw) {
-      const eff = effectiveStatus(acc, 2);
-      if (eff === "available") desktopStatusCounts.available++;
-      else desktopStatusCounts.sold++;
-    }
-    const desktopTotal = allDesktopRaw.length;
-
-    // ── Overall (gabungan) ────────────────────────────────────────────────────
-    const statusCounts: Record<string, number> = {
-      available: mobileStatusCounts.available + desktopStatusCounts.available,
-      sold: mobileStatusCounts.sold + desktopStatusCounts.sold,
-    };
-
-    // ── Sisa slot (hanya dari akun yang status available) ─────────────────────
-    const remainingSlotsMobile = allMobileRaw
-      .filter(acc => effectiveStatus(acc, 3) === "available")
-      .reduce((sum, acc) => {
-        return sum + Math.max(0, (acc.maxSlots ?? 3) - (acc.usedSlots ?? 0));
-      }, 0);
-    const remainingSlotsDesktop = allDesktopRaw
-      .filter(acc => effectiveStatus(acc, 2) === "available")
-      .reduce((sum, acc) => {
-        return sum + Math.max(0, (acc.maxSlots ?? 2) - (acc.usedSlots ?? 0));
-      }, 0);
->>>>>>> 6a3f9939c61eb1eb87c7a49424db2272b0dc9d47:capcut-pro-dashboard/src/app/api/stock/route.ts
 
     return NextResponse.json({
       accounts, total, page, limit,
