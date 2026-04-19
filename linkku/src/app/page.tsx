@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
+import { useRealtimeTables } from "@/hooks/useRealtimeTable";
 import Topbar from "@/components/Topbar";
 import { usePrivacy } from "@/context/PrivacyContext";
 import {
@@ -181,7 +182,7 @@ export default function DashboardPage() {
   const [range, setRange] = useState("3m");
 
   // Fetch stat cards
-  useEffect(() => {
+  const fetchStats = useCallback(() => {
     fetch("/api/stats")
       .then((r) => r.json())
       .then(setData)
@@ -189,8 +190,10 @@ export default function DashboardPage() {
       .finally(() => setLoading(false));
   }, []);
 
+  useEffect(() => { fetchStats(); }, [fetchStats]);
+
   // Fetch chart data
-  useEffect(() => {
+  const fetchChart = useCallback(() => {
     setChartLoading(true);
     fetch(`/api/analytics/charts?range=${range}`)
       .then((r) => r.json())
@@ -198,6 +201,14 @@ export default function DashboardPage() {
       .catch(console.error)
       .finally(() => setChartLoading(false));
   }, [range]);
+
+  useEffect(() => { fetchChart(); }, [fetchChart]);
+
+  // ── Real-time: auto-refresh when DB changes ──
+  useRealtimeTables({
+    tables: ["transactions", "users", "stock_accounts"],
+    onUpdate: () => { fetchStats(); fetchChart(); },
+  });
 
   const stats = [
     {

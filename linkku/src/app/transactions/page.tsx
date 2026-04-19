@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { useRealtimeTable } from "@/hooks/useRealtimeTable";
 import * as XLSX from "xlsx";
 import Topbar from "@/components/Topbar";
 import { usePrivacy } from "@/context/PrivacyContext";
@@ -227,6 +228,12 @@ export default function TransactionsPage() {
     setHasMore(true);
     fetchData(1, false);
   }, [fetchData]);
+
+  // ── Real-time: auto-refresh when transactions change ──
+  useRealtimeTable({
+    table: "transactions",
+    onUpdate: () => fetchData(1, false),
+  });
 
   // Fetch template settings on mount
   useEffect(() => {

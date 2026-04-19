@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { useRealtimeTable } from "@/hooks/useRealtimeTable";
 import Topbar from "@/components/Topbar";
 import {
   Plus,
@@ -377,6 +378,12 @@ export default function StockPage() {
     setHasMore(true);
     fetchData(1, false);
   }, [fetchData]);
+
+  // ── Real-time: auto-refresh when stock changes ──
+  useRealtimeTable({
+    table: "stock_accounts",
+    onUpdate: () => fetchData(1, false),
+  });
 
   function handleLoadMore() {
     const next = page + 1;

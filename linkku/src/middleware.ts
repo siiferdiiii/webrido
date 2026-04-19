@@ -10,6 +10,7 @@ const PUBLIC_PATHS = [
   "/api/auth/me",
   "/api/webhook",
   "/api/webhook/orderkuota",
+  "/api/webhook/midtrans",
   "/api/cron",
   // Affiliate public paths
   "/affiliate/login",
@@ -19,6 +20,10 @@ const PUBLIC_PATHS = [
   // Customer order pages (public — accessed via transaction ID)
   "/order",
   "/api/order",
+  // Marketplace / Checkout (public)
+  "/marketplace",
+  "/api/checkout",
+  "/api/products",
 ];
 
 export async function middleware(req: NextRequest) {

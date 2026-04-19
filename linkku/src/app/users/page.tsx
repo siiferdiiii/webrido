@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import { useRealtimeTable } from "@/hooks/useRealtimeTable";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import Topbar from "@/components/Topbar";
@@ -239,6 +240,12 @@ export default function UsersPage() {
     setHasMore(true);
     fetchData(1, false);
   }, [fetchData]);
+
+  // ── Real-time: auto-refresh when users change ──
+  useRealtimeTable({
+    table: "users",
+    onUpdate: () => fetchData(1, false),
+  });
 
   function handleLoadMore() {
     const next = page + 1;

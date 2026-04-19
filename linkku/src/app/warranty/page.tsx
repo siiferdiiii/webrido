@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { useRealtimeTable } from "@/hooks/useRealtimeTable";
 import Topbar from "@/components/Topbar";
 import { usePrivacy } from "@/context/PrivacyContext";
 import {
@@ -62,6 +63,12 @@ export default function WarrantyPage() {
   }, [search]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
+
+  // ── Real-time: auto-refresh when warranty claims change ──
+  useRealtimeTable({
+    table: "warranty_claims",
+    onUpdate: fetchData,
+  });
 
   async function handleClaim() {
     if (!claimForm.transactionId) return;

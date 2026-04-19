@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, Suspense } from "react";
+import { useRealtimeTable } from "@/hooks/useRealtimeTable";
 import { useSearchParams, useRouter } from "next/navigation";
 import Topbar from "@/components/Topbar";
 import { usePrivacy } from "@/context/PrivacyContext";
@@ -92,6 +93,12 @@ function FollowupPageInner() {
   }, [statusFilter]);
 
   useEffect(() => { fetchFollowups(); }, [fetchFollowups]);
+
+  // ── Real-time: auto-refresh when followups change ──
+  useRealtimeTable({
+    table: "scheduled_followups",
+    onUpdate: fetchFollowups,
+  });
 
   // Fetch settings template on mount
   useEffect(() => {
