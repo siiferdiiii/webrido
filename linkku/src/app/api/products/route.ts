@@ -49,20 +49,27 @@ export async function GET() {
     // Build a map: productType -> available slots
     const stockMap: Record<string, { accounts: number; slots: number }> = {};
     for (const row of stockCounts) {
-      const type = row.productType || "mobile";
+      const dbType = (row.productType || "mobile").toLowerCase();
       const totalSlots = row._sum.maxSlots || 0;
       const usedSlots = row._sum.usedSlots || 0;
-      stockMap[type] = {
-        accounts: row._count,
-        slots: Math.max(0, totalSlots - usedSlots),
-      };
+      
+      // Accumulate in case there are multiple case variants
+      if (!stockMap[dbType]) stockMap[dbType] = { accounts: 0, slots: 0 };
+      stockMap[dbType].accounts += row._count;
+      stockMap[dbType].slots += Math.max(0, totalSlots - usedSlots);
     }
 
     // Attach stock info to each product
-    const productsWithStock = products.map((p) => ({
-      ...p,
-      stock: stockMap[p.type] || { accounts: 0, slots: 0 },
-    }));
+    const productsWithStock = products.map((p) => {
+      const skuStock = stockMap[p.id.toLowerCase()];
+      const typeStock = stockMap[p.type.toLowerCase()];
+      
+      const stockInfo = skuStock || typeStock || { accounts: 0, slots: 0 };
+      return {
+        ...p,
+        stock: stockInfo,
+      };
+    });
 
     return NextResponse.json({ products: productsWithStock });
   } catch (error) {
