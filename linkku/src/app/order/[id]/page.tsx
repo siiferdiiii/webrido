@@ -5,7 +5,7 @@ import { useParams } from "next/navigation";
 import {
   ShieldCheck, Copy, CheckCircle, Clock, AlertTriangle,
   Package, CreditCard, Calendar, Mail, Lock, ArrowRight,
-  ChevronDown, ChevronUp, RefreshCw, ArrowLeft, Shield,
+  ChevronDown, ChevronUp, RefreshCw, ArrowLeft, Shield, Sparkles
 } from "lucide-react";
 import Link from "next/link";
 
@@ -49,9 +49,11 @@ export default function OrderDetailPage() {
   const [claimReason, setClaimReason] = useState("");
   const [customReason, setCustomReason] = useState("");
   const [claimLoading, setClaimLoading] = useState(false);
-  const [claimSuccess, setClaimSuccess] = useState("");
   const [claimError, setClaimError] = useState("");
+  const [claimSuccess, setClaimSuccess] = useState("");
   const [showHistory, setShowHistory] = useState(false);
+  
+  const [autoAffiliateLoading, setAutoAffiliateLoading] = useState(false);
 
   const fetchOrder = useCallback(async () => {
     try {
@@ -108,11 +110,24 @@ export default function OrderDetailPage() {
         setClaimError(data.error || "Gagal mengirim klaim");
       }
     } catch {
-      setClaimError("Terjadi kesalahan");
+      setClaimError("Gagal mengirim klaim");
     } finally {
       setClaimLoading(false);
     }
   };
+
+  async function handleAutoAffiliate() {
+    setAutoAffiliateLoading(true);
+    try {
+      const res = await fetch(`/api/order/${id}/affiliate`, { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      if (data.redirect) window.location.href = data.redirect;
+    } catch (e: any) {
+      alert("Gagal mengaktifkan affiliate: " + e.message);
+      setAutoAffiliateLoading(false);
+    }
+  }
 
   const formatDate = (d: string) =>
     new Date(d).toLocaleDateString("id-ID", {
@@ -437,6 +452,51 @@ export default function OrderDetailPage() {
               </button>
             </div>
           )}
+        </div>
+
+        {/* Affiliate CTA Card */}
+        <div style={{
+          ...styles.card,
+          background: "rgba(99, 102, 241, 0.1)",
+          borderColor: "rgba(99, 102, 241, 0.3)",
+          display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center",
+          padding: "24px 20px"
+        }}>
+          <div style={{
+            background: "rgba(99, 102, 241, 0.2)",
+            padding: "8px 16px", borderRadius: 20,
+            fontSize: 12, fontWeight: 700, color: "#a5b4fc",
+            marginBottom: 12, display: "inline-flex", alignItems: "center", gap: 6
+          }}>
+            <Sparkles size={14} /> PROGRAM AFFILIATE
+          </div>
+          
+          <h3 style={{ fontSize: 18, color: "white", fontWeight: 700, marginBottom: 8 }}>
+            Cuan Tambahan? Dapatkan Komisi 20%!
+          </h3>
+          
+          <p style={{ fontSize: 13, color: "rgba(255,255,255,0.7)", lineHeight: 1.5, marginBottom: 20 }}>
+            Bagikan link Dorizz Store ke temanmu. Nikmati <b>komisi bersih 20% langsung ke rekeningmu</b> setiap kali ada yang membeli melalui linkmu. <b>Berlaku untuk SEMUA produk!</b>
+          </p>
+
+          <button
+            onClick={handleAutoAffiliate}
+            disabled={autoAffiliateLoading}
+            style={{
+              width: "100%", padding: "14px",
+              background: "linear-gradient(135deg, #6366f1, #8b5cf6)",
+              border: "none", borderRadius: 12, color: "white",
+              fontSize: 14, fontWeight: 700,
+              cursor: autoAffiliateLoading ? "not-allowed" : "pointer",
+              opacity: autoAffiliateLoading ? 0.8 : 1,
+              display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+              fontFamily: "'Inter', sans-serif",
+              boxShadow: "0 4px 14px rgba(99, 102, 241, 0.3)",
+              transition: "transform 0.2s"
+            }}
+          >
+            {autoAffiliateLoading ? "Mengaktifkan Akun..." : "🚀 Jadi Affiliator Sekarang - Gratis!"}
+          </button>
         </div>
 
         {/* Warranty History */}
