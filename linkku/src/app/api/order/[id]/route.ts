@@ -45,11 +45,21 @@ export async function GET(
 
         if (isPaymentSuccess(midtransRes.transaction_status, midtransRes.fraud_status)) {
           // Fetch products to map productName -> SKU
-          const { sku: targetSku } = await resolveProductSku(transaction!.productName || "");
+          const { sku: targetSku, baseType } = await resolveProductSku(transaction!.productName || "");
 
           // Auto-assign stock strictly matching product SKU/Type
+          const typeConditions: any[] = [
+            { productType: { equals: baseType, mode: "insensitive" } }
+          ];
+          if (targetSku) {
+            typeConditions.push({ productType: { equals: targetSku, mode: "insensitive" } });
+          }
+
           const availableStock = await prisma.stockAccount.findFirst({
-            where: { status: "available", productType: targetSku },
+            where: {
+              status: { in: ["available", "in_use"] },
+              OR: typeConditions,
+            },
             orderBy: { createdAt: "asc" },
           });
 

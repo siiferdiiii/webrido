@@ -41,7 +41,7 @@ export async function GET() {
     // Fetch live stock counts per product type
     const stockCounts = await prisma.stockAccount.groupBy({
       by: ["productType"],
-      where: { status: "available" },
+      where: { status: { in: ["available", "in_use"] } },
       _sum: { maxSlots: true, usedSlots: true },
       _count: true,
     });

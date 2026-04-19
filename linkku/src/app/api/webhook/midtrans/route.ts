@@ -120,7 +120,7 @@ export async function POST(req: NextRequest) {
 
         const stock = await prisma.stockAccount.findFirst({
           where: {
-            status: "available",
+            status: { in: ["available", "in_use"] },
             OR: typeConditions,
           },
           orderBy: { createdAt: "asc" },
