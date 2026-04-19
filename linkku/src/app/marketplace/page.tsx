@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import {
   Smartphone,
   Monitor,
@@ -37,7 +38,8 @@ function formatCurrency(amount: number) {
   }).format(amount);
 }
 
-export default function MarketplacePage() {
+function MarketplaceContent() {
+  const searchParams = useSearchParams();
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
@@ -46,6 +48,14 @@ export default function MarketplacePage() {
   const [form, setForm] = useState({ name: "", email: "", whatsapp: "" });
   const [error, setError] = useState("");
   const [checkOrderId, setCheckOrderId] = useState("");
+
+  useEffect(() => {
+    // Preserve affiliate ID automatically
+    const affParams = searchParams.get("aff");
+    if (affParams) {
+      localStorage.setItem("affiliate_id", affParams);
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     fetch("/api/products")
@@ -64,6 +74,8 @@ export default function MarketplacePage() {
     setCheckoutLoading(true);
 
     try {
+      const storedAffId = localStorage.getItem("affiliate_id");
+      
       const res = await fetch("/api/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -74,6 +86,7 @@ export default function MarketplacePage() {
           productName: selectedProduct.name,
           amount: selectedProduct.price,
           productType: selectedProduct.type,
+          affiliateId: storedAffId || undefined,
         }),
       });
 
@@ -768,5 +781,17 @@ export default function MarketplacePage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function MarketplacePage() {
+  return (
+    <Suspense fallback={
+      <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#0a0b14" }}>
+        <Loader2 size={32} style={{ color: "#6366f1", animation: "spin 1s linear infinite" }} />
+      </div>
+    }>
+      <MarketplaceContent />
+    </Suspense>
   );
 }

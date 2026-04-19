@@ -58,6 +58,54 @@ export async function POST(req: NextRequest) {
         },
       });
 
+      // ===== [AFFILIATE COMMISSION LOGIC] =====
+      if (transaction.user?.referredBy) {
+        try {
+          const affId = transaction.user.referredBy;
+          
+          // Check for duplicate commission FIRST to prevent double counting
+          const existingCommission = await prisma.affiliateCommission.findFirst({
+            where: { transactionId: transaction.id }
+          });
+
+          if (!existingCommission) {
+            const affiliate = await prisma.affiliate.findUnique({ where: { id: affId } });
+            if (affiliate && affiliate.status === "active") {
+              const rate = Number(affiliate.commissionRate) || 0;
+              const price = Number(gross_amount);
+              const commAmount = Math.round((price * rate) / 100);
+
+              if (commAmount > 0) {
+                await prisma.$transaction([
+                  prisma.affiliateCommission.create({
+                    data: {
+                      affiliateId: affId,
+                      transactionId: transaction.id,
+                      userId: transaction.userId,
+                      amount: commAmount,
+                      transactionAmount: price,
+                      status: "credited",
+                    }
+                  }),
+                  prisma.affiliate.update({
+                    where: { id: affId },
+                    data: {
+                      balance: { increment: commAmount },
+                      totalEarned: { increment: commAmount },
+                    }
+                  })
+                ]);
+                console.log(`[Midtrans Webhook] Affiliate commission ${commAmount} processed for ${affId} from Trx ${transaction.id}`);
+              }
+            }
+          }
+        } catch (affErr) {
+          console.error("[Midtrans Webhook] Affiliate commission error:", affErr);
+        }
+      }
+      // ========================================
+
+
       // Fetch products to map productName -> SKU
       const { sku: targetSku } = await resolveProductSku(transaction.productName || "");
 

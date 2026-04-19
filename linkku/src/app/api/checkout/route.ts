@@ -8,7 +8,7 @@ import { randomUUID } from "crypto";
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { name, email, whatsapp, productName, amount, productType } = body;
+    const { name, email, whatsapp, productName, amount, productType, affiliateId } = body;
 
     if (!name || !email || !whatsapp || !amount) {
       return NextResponse.json(
@@ -19,7 +19,7 @@ export async function POST(req: NextRequest) {
 
     // 1. Find or create user
     let user = await prisma.user.findUnique({
-      where: { email: email.toLowerCase().trim() },
+      where: { email: email.toLowerCase().trim() }
     });
 
     if (!user) {
@@ -28,9 +28,18 @@ export async function POST(req: NextRequest) {
           email: email.toLowerCase().trim(),
           name: name.trim(),
           whatsapp: whatsapp.trim(),
+          referredBy: affiliateId || null,
         },
       });
+    } else if (!user.referredBy && affiliateId) {
+      // Check if user doesn't have an affiliate yet, set it according to rule:
+      // "Trx tidak ada afil, next ada afil → set referred_by"
+      user = await prisma.user.update({
+        where: { id: user.id },
+        data: { referredBy: affiliateId },
+      });
     }
+
 
     // 2. Create pending transaction
     const orderId = `DRZ-${Date.now()}-${randomUUID().substring(0, 6)}`;

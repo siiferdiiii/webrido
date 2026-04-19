@@ -10,6 +10,10 @@ import {
   Loader2,
   ArrowRight,
   Menu,
+  Copy,
+  Check,
+  Share2,
+  Package
 } from "lucide-react";
 import Link from "next/link";
 
@@ -35,12 +39,25 @@ interface DashboardData {
 export default function AffiliateDashboardPage() {
   const { user } = useAffiliateAuth();
   const [data, setData] = useState<DashboardData | null>(null);
+  const [products, setProducts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [copiedLink, setCopiedLink] = useState<string | null>(null);
+
+  const copyToClipboard = (text: string, id: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedLink(id);
+    setTimeout(() => setCopiedLink(null), 2000);
+  };
 
   useEffect(() => {
-    fetch("/api/affiliate-portal/dashboard")
-      .then(r => r.json())
-      .then(d => setData(d))
+    Promise.all([
+      fetch("/api/affiliate-portal/dashboard").then(r => r.json()),
+      fetch("/api/products").then(r => r.json())
+    ])
+      .then(([dashData, prodData]) => {
+        setData(dashData);
+        setProducts(prodData.products || []);
+      })
       .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
@@ -228,6 +245,59 @@ export default function AffiliateDashboardPage() {
               <ArrowRight size={16} className="ml-auto text-[var(--text-muted)] group-hover:text-emerald-400 transition-colors flex-shrink-0" />
             </div>
           </Link>
+        </div>
+
+        {/* Affiliate Products */}
+        <div className="glass-card p-4 sm:p-6 mt-4 sm:mt-6">
+          <div className="flex items-center gap-2 mb-4">
+            <Package size={18} className="text-indigo-400" />
+            <h3 className="text-sm font-semibold text-white">Produk untuk Dibagikan</h3>
+          </div>
+          <p className="text-xs text-[var(--text-muted)] mb-5">
+            Salin link di bawah ini dan bagikan ke media sosialmu. Klik dari link ini akan merekam perangkat mereka selama 30 hari.
+          </p>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {products.map((product) => {
+              const link = `${typeof window !== "undefined" ? window.location.origin : ""}/marketplace?aff=${aff?.id}`;
+              const isCopied = copiedLink === product.id;
+
+              return (
+                <div key={product.id} className="p-4 rounded-xl flex flex-col gap-3" style={{ background: "rgba(30,41,59,0.5)", border: "1px solid var(--border-color)" }}>
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <h4 className="text-sm font-bold text-white">{product.name}</h4>
+                      <p className="text-xs text-indigo-400 font-semibold mt-1">Komisi ~Rp {fmt(product.price * 0.2)}</p>
+                    </div>
+                    <span className="text-[10px] font-medium bg-indigo-500/10 text-indigo-400 px-2 py-1 rounded">
+                      {product.duration} Hari
+                    </span>
+                  </div>
+
+                  <div className="mt-auto pt-2">
+                    <button
+                      onClick={() => copyToClipboard(link, product.id)}
+                      className={`w-full py-2 px-3 rounded-lg flex items-center justify-center gap-2 text-xs font-semibold transition-all ${
+                        isCopied
+                          ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
+                          : "bg-indigo-600 text-white hover:bg-indigo-700"
+                      }`}
+                    >
+                      {isCopied ? (
+                        <>
+                          <Check size={14} /> Tersalin!
+                        </>
+                      ) : (
+                        <>
+                          <Copy size={14} /> Salin Link Affiliate
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
       </div>
     </div>
