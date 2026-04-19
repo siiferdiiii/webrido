@@ -134,7 +134,7 @@ export async function POST(req: NextRequest) {
       // Diurutkan usedSlots ASC supaya akun dengan slot paling sedikit dipilih duluan (round-robin)
       const candidateAccounts = await tx.stockAccount.findMany({
         where: {
-          status: "available",
+          status: { in: ["available", "in_use"] },
           productType: detectedProductType, // FIX #4: filter by productType
         },
         orderBy: [{ usedSlots: "asc" }, { createdAt: "asc" }],

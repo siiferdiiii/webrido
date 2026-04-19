@@ -115,7 +115,7 @@ export async function POST(req: NextRequest) {
     // PENTING: exclude akun lama agar tidak reassign akun yang sama!
     const candidateAccounts = await prisma.stockAccount.findMany({
       where: {
-        status: "available",
+        status: { in: ["available", "in_use"] },
         productType: oldProductType,
         ...(transaction.stockAccountId ? { id: { not: transaction.stockAccountId } } : {}),
       },
