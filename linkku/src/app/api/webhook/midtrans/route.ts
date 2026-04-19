@@ -59,7 +59,7 @@ export async function POST(req: NextRequest) {
       });
 
       // ===== [AFFILIATE COMMISSION LOGIC] =====
-      if (transaction.user?.referredBy) {
+      if (transaction.user?.referredBy && transaction.user.referredBy !== "undefined" && transaction.user.referredBy.length > 10) {
         try {
           const affId = transaction.user.referredBy;
           
@@ -111,13 +111,17 @@ export async function POST(req: NextRequest) {
 
       // Auto-assign stock account strictly matching product SKU/Type
       try {
+        const typeConditions: any[] = [
+          { productType: { equals: baseType, mode: "insensitive" } }
+        ];
+        if (targetSku) {
+          typeConditions.push({ productType: { equals: targetSku, mode: "insensitive" } });
+        }
+
         const stock = await prisma.stockAccount.findFirst({
           where: {
             status: "available",
-            OR: [
-              { productType: { equals: targetSku, mode: "insensitive" } },
-              { productType: { equals: baseType, mode: "insensitive" } },
-            ],
+            OR: typeConditions,
           },
           orderBy: { createdAt: "asc" },
         });
