@@ -26,7 +26,7 @@ import type { PermissionKey } from "@/lib/auth-shared";
 // ─── Navigation config ────────────────────────────────────────────────────────
 
 const navItems: { href: string; label: string; icon: React.ElementType; permission?: PermissionKey }[] = [
-  { href: "/", label: "Dashboard", icon: LayoutDashboard }, // Always visible
+  { href: "/admin-web", label: "Dashboard", icon: LayoutDashboard }, // Always visible
   { href: "/transactions", label: "Transaksi", icon: ArrowLeftRight, permission: "page_transactions" },
   { href: "/users", label: "Pelanggan", icon: Users, permission: "page_customers" },
   { href: "/products", label: "Kelola Produk", icon: Package, permission: "page_stock" },

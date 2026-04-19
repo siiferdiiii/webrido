@@ -10,7 +10,7 @@ import { MobileNavProvider } from "@/context/MobileNavContext";
 import { ReactNode } from "react";
 
 const AUTH_PAGES = ["/login", "/register", "/affiliate/login", "/affiliate/setup"];
-const PUBLIC_PAGES = ["/order", "/marketplace"];
+const PUBLIC_PAGES = ["/", "/order"];
 
 export default function LayoutWrapper({ children }: { children: ReactNode }) {
   const pathname = usePathname();

@@ -1,72 +1,34 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
-import { useRealtimeTables } from "@/hooks/useRealtimeTable";
-import Topbar from "@/components/Topbar";
-import { usePrivacy } from "@/context/PrivacyContext";
+import { useState, useEffect, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import {
-  Users,
-  ArrowLeftRight,
-  Package,
-  TrendingUp,
-  AlertTriangle,
-  UserCheck,
-  Loader2,
+  Smartphone,
+  Monitor,
+  Check,
   ShoppingCart,
-  DollarSign,
-  UserPlus,
+  Loader2,
+  Star,
+  Shield,
+  Zap,
+  Sparkles,
+  ArrowRight,
+  Search,
+  X,
+  Package,
 } from "lucide-react";
-import {
-  AreaChart,
-  Area,
-  BarChart,
-  Bar,
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-} from "recharts";
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-
-interface StatData {
-  totalTransactions: number;
-  totalUsers: number;
-  availableStock: number;
-  activeUsers: number;
-  recentTransactions: Array<{
-    id: string;
-    amount: number;
-    status: string | null;
-    purchaseDate: string | null;
-    user: { name: string; email: string; whatsapp: string | null } | null;
-  }>;
-  expiringUsers: Array<{
-    id: string;
-    warrantyExpiredAt: string | null;
-    user: { name: string; whatsapp: string | null; followUpStatus: string | null } | null;
-  }>;
+interface Product {
+  id: string;
+  name: string;
+  description: string;
+  price: number;
+  duration: number;
+  type: string;
+  features: string[];
+  popular: boolean;
+  stock?: { accounts: number; slots: number };
 }
-
-interface ChartPoint {
-  date: string;
-  label: string;
-  periodLabel: string;
-  penjualan: number;
-  omset: number;
-  newUser: number;
-}
-
-interface ChartData {
-  chartData: ChartPoint[];
-  summary: { totalPenjualan: number; totalOmset: number; totalNewUser: number };
-  range: string;
-}
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function formatCurrency(amount: number) {
   return new Intl.NumberFormat("id-ID", {
@@ -76,538 +38,760 @@ function formatCurrency(amount: number) {
   }).format(amount);
 }
 
-function formatCurrencyShort(amount: number) {
-  if (amount >= 1_000_000_000) return `${(amount / 1_000_000_000).toFixed(1)}M`;
-  if (amount >= 1_000_000) return `${(amount / 1_000_000).toFixed(1)}jt`;
-  if (amount >= 1_000) return `${(amount / 1_000).toFixed(0)}rb`;
-  return `${amount}`;
-}
-
-function formatDate(dateStr: string | null) {
-  if (!dateStr) return "-";
-  return new Date(dateStr).toLocaleDateString("id-ID", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
-}
-
-function getStatusBadge(status: string | null) {
-  switch (status) {
-    case "success": return <span className="badge badge-success">Sukses</span>;
-    case "pending": return <span className="badge badge-warning">Pending</span>;
-    case "failed": return <span className="badge badge-danger">Gagal</span>;
-    default: return <span className="badge badge-neutral">{status || "-"}</span>;
-  }
-}
-
-// ─── Custom Tooltip ───────────────────────────────────────────────────────────
-
-function PenjualanTooltip({ active, payload }: any) {
-  if (!active || !payload?.length) return null;
-  const d = payload[0]?.payload as ChartPoint;
-  return (
-    <div style={{
-      background: "rgba(15,17,30,0.97)",
-      border: "1px solid rgba(99,102,241,0.3)",
-      borderRadius: 12,
-      padding: "10px 14px",
-      backdropFilter: "blur(16px)",
-    }}>
-      <p style={{ color: "#818cf8", fontSize: 11, fontWeight: 600, marginBottom: 2 }}>{d?.periodLabel || d?.label}</p>
-      <p style={{ color: "white", fontSize: 14, fontWeight: 700 }}>
-        {payload[0]?.value} transaksi
-      </p>
-    </div>
-  );
-}
-
-function OmsetTooltip({ active, payload }: any) {
-  if (!active || !payload?.length) return null;
-  const d = payload[0]?.payload as ChartPoint;
-  return (
-    <div style={{
-      background: "rgba(15,17,30,0.97)",
-      border: "1px solid rgba(16,185,129,0.3)",
-      borderRadius: 12,
-      padding: "10px 14px",
-      backdropFilter: "blur(16px)",
-    }}>
-      <p style={{ color: "#34d399", fontSize: 11, fontWeight: 600, marginBottom: 2 }}>{d?.periodLabel || d?.label}</p>
-      <p style={{ color: "white", fontSize: 14, fontWeight: 700 }}>
-        {formatCurrency(payload[0]?.value || 0)}
-      </p>
-    </div>
-  );
-}
-
-function UserTooltip({ active, payload }: any) {
-  if (!active || !payload?.length) return null;
-  const d = payload[0]?.payload as ChartPoint;
-  return (
-    <div style={{
-      background: "rgba(15,17,30,0.97)",
-      border: "1px solid rgba(34,211,238,0.3)",
-      borderRadius: 12,
-      padding: "10px 14px",
-      backdropFilter: "blur(16px)",
-    }}>
-      <p style={{ color: "#22d3ee", fontSize: 11, fontWeight: 600, marginBottom: 2 }}>{d?.periodLabel || d?.label}</p>
-      <p style={{ color: "white", fontSize: 14, fontWeight: 700 }}>
-        +{payload[0]?.value} pelanggan baru
-      </p>
-    </div>
-  );
-}
-
-// ─── Range Selector ───────────────────────────────────────────────────────────
-
-const RANGES = [
-  { value: "1m", label: "1 Bulan" },
-  { value: "3m", label: "3 Bulan" },
-  { value: "6m", label: "6 Bulan" },
-  { value: "1y", label: "1 Tahun" },
-];
-
-// ─── Main Component ───────────────────────────────────────────────────────────
-
-export default function DashboardPage() {
-  const { maskEmail, maskPhone } = usePrivacy();
-
-  const [data, setData] = useState<StatData | null>(null);
+function MarketplaceContent() {
+  const searchParams = useSearchParams();
+  const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [showCheckout, setShowCheckout] = useState(false);
+  const [checkoutLoading, setCheckoutLoading] = useState(false);
+  const [form, setForm] = useState({ name: "", email: "", whatsapp: "" });
+  const [error, setError] = useState("");
+  const [checkOrderId, setCheckOrderId] = useState("");
 
-  const [chartData, setChartData] = useState<ChartData | null>(null);
-  const [chartLoading, setChartLoading] = useState(true);
-  const [range, setRange] = useState("3m");
+  useEffect(() => {
+    // Preserve affiliate ID automatically
+    const affParams = searchParams.get("aff");
+    if (affParams) {
+      localStorage.setItem("affiliate_id", affParams);
+    }
+  }, [searchParams]);
 
-  // Fetch stat cards
-  const fetchStats = useCallback(() => {
-    fetch("/api/stats")
+  useEffect(() => {
+    fetch("/api/products")
       .then((r) => r.json())
-      .then(setData)
+      .then((d) => setProducts(d.products || []))
       .catch(console.error)
       .finally(() => setLoading(false));
   }, []);
 
-  useEffect(() => { fetchStats(); }, [fetchStats]);
+  async function handleCheckout() {
+    if (!selectedProduct || !form.name || !form.email || !form.whatsapp) {
+      setError("Semua field wajib diisi");
+      return;
+    }
+    setError("");
+    setCheckoutLoading(true);
 
-  // Fetch chart data
-  const fetchChart = useCallback(() => {
-    setChartLoading(true);
-    fetch(`/api/analytics/charts?range=${range}`)
-      .then((r) => r.json())
-      .then(setChartData)
-      .catch(console.error)
-      .finally(() => setChartLoading(false));
-  }, [range]);
+    try {
+      const storedAffId = localStorage.getItem("affiliate_id");
+      
+      const res = await fetch("/api/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: form.name,
+          email: form.email,
+          whatsapp: form.whatsapp,
+          productName: selectedProduct.name,
+          amount: selectedProduct.price,
+          productType: selectedProduct.type,
+          affiliateId: storedAffId || undefined,
+        }),
+      });
 
-  useEffect(() => { fetchChart(); }, [fetchChart]);
+      const json = await res.json();
 
-  // ── Real-time: auto-refresh when DB changes ──
-  useRealtimeTables({
-    tables: ["transactions", "users", "stock_accounts"],
-    onUpdate: () => { fetchStats(); fetchChart(); },
-  });
+      if (!res.ok) {
+        setError(json.error || "Gagal membuat pembayaran");
+        setCheckoutLoading(false);
+        return;
+      }
 
-  const stats = [
-    {
-      label: "Total Transaksi",
-      value: data?.totalTransactions?.toLocaleString("id-ID") || "0",
-      icon: ArrowLeftRight,
-      color: "#818cf8",
-      bg: "rgba(99,102,241,0.12)",
-    },
-    {
-      label: "Total Pelanggan",
-      value: data?.totalUsers?.toLocaleString("id-ID") || "0",
-      icon: Users,
-      color: "#22d3ee",
-      bg: "rgba(34,211,238,0.12)",
-    },
-    {
-      label: "Stok Tersedia",
-      value: data?.availableStock?.toLocaleString("id-ID") || "0",
-      icon: Package,
-      color: "#34d399",
-      bg: "rgba(16,185,129,0.12)",
-    },
-    {
-      label: "Pelanggan Aktif",
-      value: data?.activeUsers?.toLocaleString("id-ID") || "0",
-      icon: UserCheck,
-      color: "#fbbf24",
-      bg: "rgba(245,158,11,0.12)",
-    },
-  ];
-
-  // Hitung interval tick agar sumbu X cukup padat tapi tidak tumpang tindih
-  const totalPoints = chartData?.chartData?.length || 0;
-  const maxTicks = range === "1m" ? 10 : range === "3m" ? 12 : 10;
-  const LABEL_TICK_COUNT = totalPoints <= maxTicks ? 1 : Math.ceil(totalPoints / maxTicks);
-
-  const filteredLabels = (chartData?.chartData || []).filter(
-    (_, i) => i % LABEL_TICK_COUNT === 0 || i === (chartData?.chartData?.length || 1) - 1
-  );
-  const labelSet = new Set(filteredLabels.map((d) => d.label));
+      // Redirect to Midtrans payment page
+      if (json.redirectUrl) {
+        window.location.href = json.redirectUrl;
+      }
+    } catch {
+      setError("Koneksi error, coba lagi");
+    }
+    setCheckoutLoading(false);
+  }
 
   return (
-    <>
-      <Topbar title="Dashboard" subtitle="Ringkasan overview bisnis CapCut Pro" />
+    <div
+      style={{
+        minHeight: "100vh",
+        background: "linear-gradient(180deg, #0a0b14 0%, #0f1029 50%, #0a0b14 100%)",
+        color: "white",
+      }}
+    >
+      {/* ── Hero Section ── */}
+      <header
+        style={{
+          position: "relative",
+          overflow: "hidden",
+          padding: "60px 20px 40px",
+          textAlign: "center",
+        }}
+      >
+        {/* Glow effects */}
+        <div
+          style={{
+            position: "absolute",
+            top: "-40%",
+            left: "50%",
+            transform: "translateX(-50%)",
+            width: "600px",
+            height: "400px",
+            background: "radial-gradient(ellipse, rgba(99,102,241,0.15), transparent 70%)",
+            pointerEvents: "none",
+          }}
+        />
+        <div
+          style={{
+            position: "absolute",
+            top: "-20%",
+            right: "10%",
+            width: "300px",
+            height: "300px",
+            background: "radial-gradient(circle, rgba(139,92,246,0.1), transparent 70%)",
+            pointerEvents: "none",
+          }}
+        />
 
-      <div className="px-4 md:px-8 pb-8 space-y-6">
+        <div style={{ position: "relative", zIndex: 1, maxWidth: 800, margin: "0 auto" }}>
+          {/* Logo/Brand */}
+          <div
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 10,
+              padding: "8px 20px",
+              borderRadius: 100,
+              background: "rgba(99,102,241,0.1)",
+              border: "1px solid rgba(99,102,241,0.2)",
+              marginBottom: 24,
+            }}
+          >
+            <Sparkles size={16} style={{ color: "#818cf8" }} />
+            <span style={{ fontSize: 13, fontWeight: 600, color: "#a5b4fc" }}>
+              Dorizz Store — Official CapCut Pro Reseller
+            </span>
+          </div>
+
+          <h1
+            style={{
+              fontSize: "clamp(28px, 5vw, 48px)",
+              fontWeight: 800,
+              lineHeight: 1.15,
+              background: "linear-gradient(135deg, #ffffff 0%, #a5b4fc 50%, #818cf8 100%)",
+              WebkitBackgroundClip: "text",
+              WebkitTextFillColor: "transparent",
+              marginBottom: 16,
+            }}
+          >
+            CapCut Pro Premium
+            <br />
+            <span style={{ fontSize: "0.65em", fontWeight: 600 }}>Harga Terjangkau, Akses Penuh</span>
+          </h1>
+
+          <p
+            style={{
+              fontSize: "clamp(14px, 2vw, 16px)",
+              color: "rgba(255,255,255,0.55)",
+              maxWidth: 540,
+              margin: "0 auto 32px",
+              lineHeight: 1.6,
+            }}
+          >
+            Nikmati semua fitur premium CapCut Pro — filter eksklusif, export tanpa watermark, AI tools, dan cloud
+            storage. Aktivasi instan, garansi penuh.
+          </p>
+
+          {/* Trust badges */}
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "center",
+              gap: 24,
+              flexWrap: "wrap",
+            }}
+          >
+            {[
+              { icon: Zap, label: "Aktivasi Instan" },
+              { icon: Shield, label: "Garansi Full" },
+              { icon: Star, label: "1000+ Customer" },
+            ].map((badge) => (
+              <div
+                key={badge.label}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 6,
+                  fontSize: 13,
+                  color: "rgba(255,255,255,0.5)",
+                }}
+              >
+                <badge.icon size={14} style={{ color: "#818cf8" }} />
+                {badge.label}
+              </div>
+            ))}
+          </div>
+        </div>
+      </header>
+
+      {/* ── Check Order Section ── */}
+      <section style={{ maxWidth: 480, margin: "0 auto 48px", padding: "0 20px" }}>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            padding: "10px 16px",
+            borderRadius: 14,
+            background: "rgba(255,255,255,0.03)",
+            border: "1px solid rgba(255,255,255,0.08)",
+          }}
+        >
+          <Search size={16} style={{ color: "rgba(255,255,255,0.3)", flexShrink: 0 }} />
+          <input
+            type="text"
+            placeholder="Cek pesanan — masukkan ID Transaksi..."
+            value={checkOrderId}
+            onChange={(e) => setCheckOrderId(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && checkOrderId.trim()) {
+                window.location.href = `/order/${checkOrderId.trim()}`;
+              }
+            }}
+            style={{
+              flex: 1,
+              background: "none",
+              border: "none",
+              outline: "none",
+              color: "white",
+              fontSize: 14,
+            }}
+          />
+          {checkOrderId && (
+            <button
+              onClick={() => {
+                window.location.href = `/order/${checkOrderId.trim()}`;
+              }}
+              style={{
+                padding: "6px 14px",
+                borderRadius: 8,
+                background: "rgba(99,102,241,0.2)",
+                border: "1px solid rgba(99,102,241,0.3)",
+                color: "#a5b4fc",
+                fontSize: 12,
+                fontWeight: 600,
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                gap: 4,
+              }}
+            >
+              Cek <ArrowRight size={12} />
+            </button>
+          )}
+        </div>
+      </section>
+
+      {/* ── Products Grid ── */}
+      <section style={{ maxWidth: 960, margin: "0 auto", padding: "0 20px 80px" }}>
+        <h2
+          style={{
+            textAlign: "center",
+            fontSize: 22,
+            fontWeight: 700,
+            marginBottom: 8,
+          }}
+        >
+          Pilih Paket
+        </h2>
+        <p
+          style={{
+            textAlign: "center",
+            fontSize: 14,
+            color: "rgba(255,255,255,0.4)",
+            marginBottom: 32,
+          }}
+        >
+          Sharing akun premium — harga bersahabat, kualitas terjamin
+        </p>
+
         {loading ? (
-          <div className="flex items-center justify-center py-20">
-            <Loader2 size={32} className="animate-spin text-[#818cf8]" />
-            <span className="ml-3 text-[var(--text-secondary)]">Memuat data...</span>
+          <div style={{ textAlign: "center", padding: 60 }}>
+            <Loader2 size={32} style={{ color: "#818cf8" }} className="animate-spin" />
           </div>
         ) : (
-          <>
-            {/* ── Stat Cards: Mobile = 1 compact card | Desktop = 4-col grid ── */}
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+              gap: 16,
+            }}
+          >
+            {products.map((product) => {
+              const isSelected = selectedProduct?.id === product.id;
+              const isMobile = product.type === "mobile";
+              const stockSlots = product.stock?.slots ?? 0;
+              const isOutOfStock = stockSlots <= 0;
 
-            {/* Mobile compact card — 2×2 grid */}
-            <div className="glass-card p-4 grid grid-cols-2 gap-x-4 gap-y-3 md:hidden">
-              {stats.map((stat) => (
-                <div key={stat.label} className="flex items-center gap-2.5">
-                  <div
-                    className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
-                    style={{ background: stat.bg }}
-                  >
-                    <stat.icon size={15} style={{ color: stat.color }} />
-                  </div>
-                  <div>
-                    <p className="text-sm font-bold text-white leading-none">{stat.value}</p>
-                    <p className="text-[10px] text-[var(--text-muted)] mt-0.5 leading-none">{stat.label}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            {/* Desktop 4-col grid */}
-            <div className="hidden md:grid grid-cols-2 xl:grid-cols-4 gap-4">
-              {stats.map((stat) => (
+              return (
                 <div
-                  key={stat.label}
-                  className="glass-card"
-                  style={{ padding: "20px 24px" }}
+                  key={product.id}
+                  onClick={() => {
+                    if (!isOutOfStock) {
+                      setSelectedProduct(product);
+                      setShowCheckout(true);
+                    }
+                  }}
+                  style={{
+                    position: "relative",
+                    borderRadius: 20,
+                    padding: "28px 24px",
+                    cursor: isOutOfStock ? "not-allowed" : "pointer",
+                    transition: "all 0.3s ease",
+                    opacity: isOutOfStock ? 0.5 : 1,
+                    background: isSelected
+                      ? "linear-gradient(135deg, rgba(99,102,241,0.15), rgba(139,92,246,0.1))"
+                      : "rgba(255,255,255,0.025)",
+                    border: `1px solid ${
+                      isSelected ? "rgba(99,102,241,0.5)" : "rgba(255,255,255,0.06)"
+                    }`,
+                    boxShadow: isSelected ? "0 8px 40px rgba(99,102,241,0.15)" : "none",
+                    transform: isSelected ? "translateY(-2px)" : "none",
+                  }}
                 >
-                  <div className="flex items-start justify-between mb-4">
+                  {/* Popular badge */}
+                  {product.popular && (
                     <div
-                      className="w-11 h-11 rounded-xl flex items-center justify-center"
-                      style={{ background: stat.bg }}
+                      style={{
+                        position: "absolute",
+                        top: -10,
+                        right: 16,
+                        padding: "4px 12px",
+                        borderRadius: 100,
+                        background: "linear-gradient(135deg, #6366f1, #8b5cf6)",
+                        fontSize: 10,
+                        fontWeight: 700,
+                        color: "white",
+                        letterSpacing: "0.5px",
+                        textTransform: "uppercase",
+                        boxShadow: "0 4px 16px rgba(99,102,241,0.4)",
+                      }}
                     >
-                      <stat.icon size={20} style={{ color: stat.color }} />
+                      Best Seller
                     </div>
-                  </div>
-                  <p className="text-2xl font-bold text-white">{stat.value}</p>
-                  <p className="text-sm text-[var(--text-secondary)] mt-1">{stat.label}</p>
-                </div>
-              ))}
-            </div>
+                  )}
 
-            {/* ════════════════════════════════
-                GRAFIK SECTION
-            ════════════════════════════════ */}
-            <div className="glass-card" style={{ padding: "24px 28px" }}>
-              {/* Header + Range Selector */}
-              <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
-                <div>
-                  <h3 className="font-semibold text-white text-base">Tren Performa Bisnis</h3>
-                  <p className="text-xs text-[var(--text-muted)] mt-0.5">
-                    Penjualan, omset, dan penambahan pelanggan
-                  </p>
-                </div>
-                {/* Range pills — scrollable on mobile */}
-                <div className="filter-pills-scroll">
-                  <div className="flex items-center gap-1 p-1 rounded-xl flex-nowrap" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.06)" }}>
-                    {RANGES.map((r) => (
-                      <button
-                        key={r.value}
-                        onClick={() => setRange(r.value)}
-                        className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all flex-shrink-0"
+                  {/* SKU Badge */}
+                  <div
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 4,
+                      padding: "3px 8px",
+                      borderRadius: 6,
+                      background: "rgba(255,255,255,0.04)",
+                      border: "1px solid rgba(255,255,255,0.08)",
+                      fontSize: 10,
+                      fontWeight: 600,
+                      fontFamily: "monospace",
+                      color: "rgba(255,255,255,0.4)",
+                      marginBottom: 12,
+                      letterSpacing: "0.5px",
+                    }}
+                  >
+                    SKU: {product.id}
+                  </div>
+
+                  {/* Icon + Stock */}
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
+                    <div
+                      style={{
+                        width: 44,
+                        height: 44,
+                        borderRadius: 14,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        background: isMobile ? "rgba(34,197,94,0.1)" : "rgba(59,130,246,0.1)",
+                        border: `1px solid ${isMobile ? "rgba(34,197,94,0.2)" : "rgba(59,130,246,0.2)"}`,
+                      }}
+                    >
+                      {isMobile ? (
+                        <Smartphone size={20} style={{ color: "#22c55e" }} />
+                      ) : (
+                        <Monitor size={20} style={{ color: "#3b82f6" }} />
+                      )}
+                    </div>
+
+                    {/* Stock indicator */}
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 5,
+                        padding: "4px 10px",
+                        borderRadius: 8,
+                        background: isOutOfStock
+                          ? "rgba(239,68,68,0.1)"
+                          : stockSlots <= 3
+                          ? "rgba(251,191,36,0.1)"
+                          : "rgba(34,197,94,0.08)",
+                        border: `1px solid ${isOutOfStock
+                          ? "rgba(239,68,68,0.25)"
+                          : stockSlots <= 3
+                          ? "rgba(251,191,36,0.25)"
+                          : "rgba(34,197,94,0.2)"}`,
+                      }}
+                    >
+                      <Package size={11} style={{ color: isOutOfStock ? "#ef4444" : stockSlots <= 3 ? "#fbbf24" : "#22c55e" }} />
+                      <span
                         style={{
-                          background: range === r.value ? "rgba(129,140,248,0.2)" : "transparent",
-                          color: range === r.value ? "#818cf8" : "var(--text-muted)",
-                          border: range === r.value ? "1px solid rgba(129,140,248,0.4)" : "1px solid transparent",
+                          fontSize: 11,
+                          fontWeight: 700,
+                          color: isOutOfStock ? "#ef4444" : stockSlots <= 3 ? "#fbbf24" : "#22c55e",
                         }}
                       >
-                        {r.label}
-                      </button>
+                        {isOutOfStock ? "Habis" : `${stockSlots} slot`}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Name */}
+                  <h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 4 }}>{product.name}</h3>
+                  <p style={{ fontSize: 12, color: "rgba(255,255,255,0.4)", marginBottom: 16, lineHeight: 1.5 }}>
+                    {product.description}
+                  </p>
+
+                  {/* Price */}
+                  <div style={{ marginBottom: 20 }}>
+                    <span
+                      style={{
+                        fontSize: 28,
+                        fontWeight: 800,
+                        background: "linear-gradient(135deg, #ffffff, #a5b4fc)",
+                        WebkitBackgroundClip: "text",
+                        WebkitTextFillColor: "transparent",
+                      }}
+                    >
+                      {formatCurrency(product.price)}
+                    </span>
+                    <span style={{ fontSize: 12, color: "rgba(255,255,255,0.35)", marginLeft: 4 }}>
+                      / {product.duration} hari
+                    </span>
+                  </div>
+
+                  {/* Features */}
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 20 }}>
+                    {product.features.map((f, i) => (
+                      <div key={i} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <Check size={14} style={{ color: "#22c55e", flexShrink: 0 }} />
+                        <span style={{ fontSize: 12, color: "rgba(255,255,255,0.55)" }}>{f}</span>
+                      </div>
                     ))}
                   </div>
+
+                  {/* CTA */}
+                  <button
+                    disabled={isOutOfStock}
+                    style={{
+                      width: "100%",
+                      padding: "12px 0",
+                      borderRadius: 12,
+                      border: "none",
+                      fontWeight: 700,
+                      fontSize: 14,
+                      cursor: isOutOfStock ? "not-allowed" : "pointer",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: 8,
+                      transition: "all 0.2s",
+                      background: isOutOfStock
+                        ? "rgba(255,255,255,0.03)"
+                        : product.popular
+                        ? "linear-gradient(135deg, #6366f1, #8b5cf6)"
+                        : "rgba(255,255,255,0.06)",
+                      color: isOutOfStock ? "rgba(255,255,255,0.3)" : product.popular ? "white" : "rgba(255,255,255,0.7)",
+                      boxShadow: product.popular && !isOutOfStock ? "0 4px 20px rgba(99,102,241,0.3)" : "none",
+                    }}
+                  >
+                    {isOutOfStock ? (
+                      <>Stok Habis</>  
+                    ) : (
+                      <><ShoppingCart size={15} /> Beli Sekarang</>
+                    )}
+                  </button>
                 </div>
-              </div>
-
-              {chartLoading ? (
-                <div className="flex items-center justify-center" style={{ height: 400 }}>
-                  <Loader2 size={28} className="animate-spin text-[#818cf8]" />
-                  <span className="ml-2 text-[var(--text-secondary)] text-sm">Memuat grafik...</span>
-                </div>
-              ) : (
-                <>
-                  {/* Summary badges — horizontal compact row on mobile */}
-                  {chartData?.summary && (
-                    <>
-                      {/* Mobile: single compact row */}
-                      <div className="flex items-center gap-2 mb-4 md:hidden">
-                        <div className="flex-1 rounded-xl px-3 py-2" style={{ background: "rgba(99,102,241,0.08)", border: "1px solid rgba(99,102,241,0.15)" }}>
-                          <div className="flex items-center gap-1.5 mb-0.5">
-                            <ShoppingCart size={11} style={{ color: "#818cf8" }} />
-                            <span className="text-[10px] text-[var(--text-muted)]">Penjualan</span>
-                          </div>
-                          <p className="text-sm font-bold text-white">{chartData.summary.totalPenjualan.toLocaleString("id-ID")}</p>
-                        </div>
-                        <div className="flex-1 rounded-xl px-3 py-2" style={{ background: "rgba(16,185,129,0.08)", border: "1px solid rgba(16,185,129,0.15)" }}>
-                          <div className="flex items-center gap-1.5 mb-0.5">
-                            <DollarSign size={11} style={{ color: "#34d399" }} />
-                            <span className="text-[10px] text-[var(--text-muted)]">Omset</span>
-                          </div>
-                          <p className="text-sm font-bold text-white">{formatCurrencyShort(chartData.summary.totalOmset)}</p>
-                        </div>
-                        <div className="flex-1 rounded-xl px-3 py-2" style={{ background: "rgba(34,211,238,0.08)", border: "1px solid rgba(34,211,238,0.15)" }}>
-                          <div className="flex items-center gap-1.5 mb-0.5">
-                            <UserPlus size={11} style={{ color: "#22d3ee" }} />
-                            <span className="text-[10px] text-[var(--text-muted)]">User Baru</span>
-                          </div>
-                          <p className="text-sm font-bold text-white">{chartData.summary.totalNewUser.toLocaleString("id-ID")}</p>
-                        </div>
-                      </div>
-
-                      {/* Desktop: vertical cards */}
-                      <div className="hidden md:grid grid-cols-3 gap-4 mb-6">
-                      <div className="rounded-xl px-4 py-3" style={{ background: "rgba(99,102,241,0.08)", border: "1px solid rgba(99,102,241,0.15)" }}>
-                        <div className="flex items-center gap-2 mb-1">
-                          <ShoppingCart size={13} style={{ color: "#818cf8" }} />
-                          <span className="text-xs text-[var(--text-muted)]">Total Penjualan</span>
-                        </div>
-                        <p className="text-xl font-bold text-white">{chartData.summary.totalPenjualan.toLocaleString("id-ID")}</p>
-                        <p className="text-xs text-[var(--text-muted)]">transaksi sukses</p>
-                      </div>
-                      <div className="rounded-xl px-4 py-3" style={{ background: "rgba(16,185,129,0.08)", border: "1px solid rgba(16,185,129,0.15)" }}>
-                        <div className="flex items-center gap-2 mb-1">
-                          <DollarSign size={13} style={{ color: "#34d399" }} />
-                          <span className="text-xs text-[var(--text-muted)]">Total Omset</span>
-                        </div>
-                        <p className="text-xl font-bold text-white">{formatCurrency(chartData.summary.totalOmset)}</p>
-                        <p className="text-xs text-[var(--text-muted)]">pendapatan kotor</p>
-                      </div>
-                      <div className="rounded-xl px-4 py-3" style={{ background: "rgba(34,211,238,0.08)", border: "1px solid rgba(34,211,238,0.15)" }}>
-                        <div className="flex items-center gap-2 mb-1">
-                          <UserPlus size={13} style={{ color: "#22d3ee" }} />
-                          <span className="text-xs text-[var(--text-muted)]">User Baru</span>
-                        </div>
-                        <p className="text-xl font-bold text-white">{chartData.summary.totalNewUser.toLocaleString("id-ID")}</p>
-                        <p className="text-xs text-[var(--text-muted)]">pelanggan bergabung</p>
-                      </div>
-                      </div>
-                    </>
-                  )}
-
-                  {/* ── Chart 1: Grafik Penjualan (Bar) ── */}
-                  <div className="mb-8">
-                    <div className="flex items-center gap-2 mb-3">
-                      <div className="w-2.5 h-2.5 rounded-full" style={{ background: "#818cf8" }} />
-                      <span className="text-sm font-semibold text-white">Grafik Penjualan</span>
-                      <span className="text-xs text-[var(--text-muted)]">(jumlah transaksi per periode)</span>
-                    </div>
-                    <ResponsiveContainer width="100%" height={200}>
-                      <BarChart data={chartData?.chartData || []} margin={{ top: 4, right: 4, left: -10, bottom: 0 }}>
-                        <defs>
-                          <linearGradient id="barGrad" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="0%" stopColor="#818cf8" stopOpacity={0.9} />
-                            <stop offset="100%" stopColor="#6366f1" stopOpacity={0.6} />
-                          </linearGradient>
-                        </defs>
-                        <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
-                        <XAxis
-                          dataKey="label"
-                          tick={{ fill: "var(--text-muted)", fontSize: 11 }}
-                          tickLine={false}
-                          axisLine={false}
-                          interval="preserveStartEnd"
-                          tickFormatter={(v) => labelSet.has(v) ? v : ""}
-                        />
-                        <YAxis
-                          tick={{ fill: "var(--text-muted)", fontSize: 11 }}
-                          tickLine={false}
-                          axisLine={false}
-                          allowDecimals={false}
-                        />
-                        <Tooltip content={<PenjualanTooltip />} />
-                        <Bar dataKey="penjualan" fill="url(#barGrad)" radius={[4, 4, 0, 0]} maxBarSize={32} />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-
-                  {/* ── Chart 2: Grafik Omset (Area) ── */}
-                  <div className="mb-8">
-                    <div className="flex items-center gap-2 mb-3">
-                      <div className="w-2.5 h-2.5 rounded-full" style={{ background: "#34d399" }} />
-                      <span className="text-sm font-semibold text-white">Grafik Omset</span>
-                      <span className="text-xs text-[var(--text-muted)]">(total revenue per periode)</span>
-                    </div>
-                    <ResponsiveContainer width="100%" height={200}>
-                      <AreaChart data={chartData?.chartData || []} margin={{ top: 4, right: 4, left: 10, bottom: 0 }}>
-                        <defs>
-                          <linearGradient id="areaGrad" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="0%" stopColor="#10b981" stopOpacity={0.4} />
-                            <stop offset="100%" stopColor="#10b981" stopOpacity={0.02} />
-                          </linearGradient>
-                        </defs>
-                        <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
-                        <XAxis
-                          dataKey="label"
-                          tick={{ fill: "var(--text-muted)", fontSize: 11 }}
-                          tickLine={false}
-                          axisLine={false}
-                          interval="preserveStartEnd"
-                          tickFormatter={(v) => labelSet.has(v) ? v : ""}
-                        />
-                        <YAxis
-                          tick={{ fill: "var(--text-muted)", fontSize: 11 }}
-                          tickLine={false}
-                          axisLine={false}
-                          tickFormatter={formatCurrencyShort}
-                        />
-                        <Tooltip content={<OmsetTooltip />} />
-                        <Area
-                          type="monotone"
-                          dataKey="omset"
-                          stroke="#34d399"
-                          strokeWidth={2}
-                          fill="url(#areaGrad)"
-                          dot={false}
-                          activeDot={{ r: 5, fill: "#34d399", stroke: "rgba(0,0,0,0.3)", strokeWidth: 2 }}
-                        />
-                      </AreaChart>
-                    </ResponsiveContainer>
-                  </div>
-
-                  {/* ── Chart 3: Grafik User Baru (Line) ── */}
-                  <div>
-                    <div className="flex items-center gap-2 mb-3">
-                      <div className="w-2.5 h-2.5 rounded-full" style={{ background: "#22d3ee" }} />
-                      <span className="text-sm font-semibold text-white">Grafik Penambahan Pelanggan</span>
-                      <span className="text-xs text-[var(--text-muted)]">(user baru per periode)</span>
-                    </div>
-                    <ResponsiveContainer width="100%" height={200}>
-                      <LineChart data={chartData?.chartData || []} margin={{ top: 4, right: 4, left: -10, bottom: 0 }}>
-                        <defs>
-                          <filter id="glow">
-                            <feGaussianBlur stdDeviation="2" result="coloredBlur" />
-                            <feMerge>
-                              <feMergeNode in="coloredBlur" />
-                              <feMergeNode in="SourceGraphic" />
-                            </feMerge>
-                          </filter>
-                        </defs>
-                        <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
-                        <XAxis
-                          dataKey="label"
-                          tick={{ fill: "var(--text-muted)", fontSize: 11 }}
-                          tickLine={false}
-                          axisLine={false}
-                          interval="preserveStartEnd"
-                          tickFormatter={(v) => labelSet.has(v) ? v : ""}
-                        />
-                        <YAxis
-                          tick={{ fill: "var(--text-muted)", fontSize: 11 }}
-                          tickLine={false}
-                          axisLine={false}
-                          allowDecimals={false}
-                        />
-                        <Tooltip content={<UserTooltip />} />
-                        <Line
-                          type="monotone"
-                          dataKey="newUser"
-                          stroke="#22d3ee"
-                          strokeWidth={2.5}
-                          dot={false}
-                          activeDot={{ r: 5, fill: "#22d3ee", stroke: "rgba(0,0,0,0.3)", strokeWidth: 2 }}
-                          filter="url(#glow)"
-                        />
-                      </LineChart>
-                    </ResponsiveContainer>
-                  </div>
-                </>
-              )}
-            </div>
-
-            {/* ── Tabel & Expiring ── */}
-            <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-              {/* Recent Transactions */}
-              <div className="xl:col-span-2 glass-card overflow-hidden">
-                <div className="flex items-center justify-between px-6 py-4 border-b border-[rgba(99,102,241,0.1)]">
-                  <h3 className="font-semibold text-white">Transaksi Terbaru</h3>
-                  <a href="/transactions" className="text-sm text-[#818cf8] hover:text-[#a5b4fc] transition-colors">
-                    Lihat Semua →
-                  </a>
-                </div>
-                <div className="overflow-x-auto">
-                  <table className="data-table">
-                    <thead>
-                      <tr>
-                        <th>Pelanggan</th>
-                        <th>Nominal</th>
-                        <th>Tanggal</th>
-                        <th>Status</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {(data?.recentTransactions || []).length === 0 ? (
-                        <tr><td colSpan={4} className="text-center py-8 text-[var(--text-muted)]">Belum ada transaksi</td></tr>
-                      ) : (
-                        data?.recentTransactions.map((trx) => (
-                          <tr key={trx.id}>
-                            <td>
-                              <div>
-                                <p className="font-medium">{trx.user?.name || "-"}</p>
-                                <p className="text-xs text-[var(--text-muted)]">{maskEmail(trx.user?.email)}</p>
-                              </div>
-                            </td>
-                            <td className="font-semibold">{formatCurrency(Number(trx.amount))}</td>
-                            <td className="text-[var(--text-secondary)]">{formatDate(trx.purchaseDate)}</td>
-                            <td>{getStatusBadge(trx.status)}</td>
-                          </tr>
-                        ))
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-
-              {/* Expiring Soon */}
-              <div className="glass-card overflow-hidden">
-                <div className="flex items-center justify-between px-6 py-4 border-b border-[rgba(99,102,241,0.1)]">
-                  <h3 className="font-semibold text-white flex items-center gap-2">
-                    <AlertTriangle size={16} className="text-amber-400" />
-                    Segera Expired
-                  </h3>
-                </div>
-                <div className="divide-y divide-[rgba(99,102,241,0.08)]">
-                  {(data?.expiringUsers || []).length === 0 ? (
-                    <p className="px-6 py-8 text-sm text-[var(--text-muted)] text-center">
-                      Tidak ada yang segera expired
-                    </p>
-                  ) : (
-                    data?.expiringUsers.map((item, idx) => (
-                      <div key={idx} className="px-6 py-4 hover:bg-[rgba(99,102,241,0.04)] transition-colors">
-                        <div className="flex items-start justify-between mb-2">
-                          <div>
-                            <p className="font-medium text-white text-sm">{item.user?.name || "-"}</p>
-                            <p className="text-xs text-[var(--text-muted)] mt-0.5">{maskPhone(item.user?.whatsapp)}</p>
-                          </div>
-                          <span className="badge badge-warning text-[11px]">{formatDate(item.warrantyExpiredAt)}</span>
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
-            </div>
-          </>
+              );
+            })}
+          </div>
         )}
+      </section>
+
+      {/* ── Footer ── */}
+      <footer
+        style={{
+          textAlign: "center",
+          padding: "32px 20px",
+          borderTop: "1px solid rgba(255,255,255,0.05)",
+          color: "rgba(255,255,255,0.3)",
+          fontSize: 12,
+        }}
+      >
+        <p>© 2026 Dorizz Store. All rights reserved.</p>
+        <p style={{ marginTop: 4 }}>
+          Pembayaran aman via{" "}
+          <span style={{ color: "#818cf8", fontWeight: 600 }}>Midtrans</span>
+        </p>
+      </footer>
+
+      {/* ── Checkout Modal ── */}
+      {showCheckout && selectedProduct && (
+        <div
+          onClick={() => setShowCheckout(false)}
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.7)",
+            backdropFilter: "blur(8px)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 100,
+            padding: 20,
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              width: "100%",
+              maxWidth: 440,
+              borderRadius: 24,
+              background: "linear-gradient(180deg, #14152a, #0f1029)",
+              border: "1px solid rgba(99,102,241,0.2)",
+              overflow: "hidden",
+              boxShadow: "0 24px 80px rgba(0,0,0,0.6)",
+            }}
+          >
+            {/* Modal Header */}
+            <div
+              style={{
+                padding: "20px 24px",
+                borderBottom: "1px solid rgba(99,102,241,0.1)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+              }}
+            >
+              <div>
+                <h3 style={{ fontSize: 18, fontWeight: 700 }}>Checkout</h3>
+                <p style={{ fontSize: 12, color: "rgba(255,255,255,0.4)", marginTop: 2 }}>
+                  {selectedProduct.name} — {formatCurrency(selectedProduct.price)}
+                </p>
+              </div>
+              <button
+                onClick={() => setShowCheckout(false)}
+                style={{
+                  background: "rgba(255,255,255,0.05)",
+                  border: "1px solid rgba(255,255,255,0.1)",
+                  borderRadius: 10,
+                  width: 36,
+                  height: 36,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  cursor: "pointer",
+                  color: "rgba(255,255,255,0.5)",
+                }}
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div style={{ padding: "24px", display: "flex", flexDirection: "column", gap: 16 }}>
+              <div>
+                <label
+                  style={{
+                    display: "block",
+                    fontSize: 12,
+                    fontWeight: 600,
+                    color: "rgba(255,255,255,0.5)",
+                    marginBottom: 6,
+                    textTransform: "uppercase",
+                    letterSpacing: "0.5px",
+                  }}
+                >
+                  Nama Lengkap
+                </label>
+                <input
+                  type="text"
+                  value={form.name}
+                  onChange={(e) => setForm({ ...form, name: e.target.value })}
+                  placeholder="Masukkan nama kamu"
+                  style={{
+                    width: "100%",
+                    padding: "12px 14px",
+                    borderRadius: 12,
+                    background: "rgba(255,255,255,0.04)",
+                    border: "1px solid rgba(255,255,255,0.08)",
+                    color: "white",
+                    fontSize: 14,
+                    outline: "none",
+                  }}
+                />
+              </div>
+
+              <div>
+                <label
+                  style={{
+                    display: "block",
+                    fontSize: 12,
+                    fontWeight: 600,
+                    color: "rgba(255,255,255,0.5)",
+                    marginBottom: 6,
+                    textTransform: "uppercase",
+                    letterSpacing: "0.5px",
+                  }}
+                >
+                  Email
+                </label>
+                <input
+                  type="email"
+                  value={form.email}
+                  onChange={(e) => setForm({ ...form, email: e.target.value })}
+                  placeholder="email@example.com"
+                  style={{
+                    width: "100%",
+                    padding: "12px 14px",
+                    borderRadius: 12,
+                    background: "rgba(255,255,255,0.04)",
+                    border: "1px solid rgba(255,255,255,0.08)",
+                    color: "white",
+                    fontSize: 14,
+                    outline: "none",
+                  }}
+                />
+              </div>
+
+              <div>
+                <label
+                  style={{
+                    display: "block",
+                    fontSize: 12,
+                    fontWeight: 600,
+                    color: "rgba(255,255,255,0.5)",
+                    marginBottom: 6,
+                    textTransform: "uppercase",
+                    letterSpacing: "0.5px",
+                  }}
+                >
+                  No. WhatsApp
+                </label>
+                <input
+                  type="text"
+                  value={form.whatsapp}
+                  onChange={(e) => setForm({ ...form, whatsapp: e.target.value })}
+                  placeholder="08xxx atau 628xxx"
+                  style={{
+                    width: "100%",
+                    padding: "12px 14px",
+                    borderRadius: 12,
+                    background: "rgba(255,255,255,0.04)",
+                    border: "1px solid rgba(255,255,255,0.08)",
+                    color: "white",
+                    fontSize: 14,
+                    outline: "none",
+                  }}
+                />
+              </div>
+
+              {error && (
+                <p style={{ fontSize: 13, color: "#f87171", padding: "8px 12px", borderRadius: 8, background: "rgba(248,113,113,0.1)" }}>
+                  {error}
+                </p>
+              )}
+
+              {/* Order Summary */}
+              <div
+                style={{
+                  padding: 16,
+                  borderRadius: 14,
+                  background: "rgba(99,102,241,0.06)",
+                  border: "1px solid rgba(99,102,241,0.15)",
+                }}
+              >
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
+                  <span style={{ fontSize: 13, color: "rgba(255,255,255,0.5)" }}>Produk</span>
+                  <span style={{ fontSize: 13, fontWeight: 600 }}>{selectedProduct.name}</span>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
+                  <span style={{ fontSize: 13, color: "rgba(255,255,255,0.5)" }}>Durasi</span>
+                  <span style={{ fontSize: 13, fontWeight: 600 }}>{selectedProduct.duration} Hari</span>
+                </div>
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    paddingTop: 8,
+                    borderTop: "1px solid rgba(99,102,241,0.15)",
+                  }}
+                >
+                  <span style={{ fontSize: 14, fontWeight: 700, color: "#a5b4fc" }}>Total</span>
+                  <span style={{ fontSize: 18, fontWeight: 800, color: "white" }}>
+                    {formatCurrency(selectedProduct.price)}
+                  </span>
+                </div>
+              </div>
+
+              <button
+                onClick={handleCheckout}
+                disabled={checkoutLoading}
+                style={{
+                  width: "100%",
+                  padding: "14px 0",
+                  borderRadius: 14,
+                  border: "none",
+                  background: "linear-gradient(135deg, #6366f1, #8b5cf6)",
+                  color: "white",
+                  fontSize: 15,
+                  fontWeight: 700,
+                  cursor: checkoutLoading ? "wait" : "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: 8,
+                  boxShadow: "0 6px 24px rgba(99,102,241,0.35)",
+                  opacity: checkoutLoading ? 0.7 : 1,
+                }}
+              >
+                {checkoutLoading ? (
+                  <>
+                    <Loader2 size={16} className="animate-spin" /> Memproses...
+                  </>
+                ) : (
+                  <>
+                    <ShoppingCart size={16} /> Bayar Sekarang
+                  </>
+                )}
+              </button>
+
+              <p style={{ fontSize: 11, color: "rgba(255,255,255,0.3)", textAlign: "center" }}>
+                Pembayaran akan diproses melalui Midtrans (QRIS, Transfer Bank, E-Wallet)
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default function MarketplacePage() {
+  return (
+    <Suspense fallback={
+      <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#0a0b14" }}>
+        <Loader2 size={32} style={{ color: "#6366f1", animation: "spin 1s linear infinite" }} />
       </div>
-    </>
+    }>
+      <MarketplaceContent />
+    </Suspense>
   );
 }
