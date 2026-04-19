@@ -29,8 +29,8 @@ const PUBLIC_PATHS = [
 export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
-  // Allow public paths
-  if (PUBLIC_PATHS.some(p => pathname.startsWith(p))) {
+  // Allow public paths (exact matches or startsWith)
+  if (pathname === "/" || PUBLIC_PATHS.some(p => pathname.startsWith(p))) {
     return NextResponse.next();
   }
 
