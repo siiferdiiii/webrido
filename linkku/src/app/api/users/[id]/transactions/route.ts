@@ -15,6 +15,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       include: {
         stockAccount: {
           select: { accountEmail: true, productType: true }
+        },
+        warrantyClaims: {
+          select: { id: true, status: true }
         }
       }
     });

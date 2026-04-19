@@ -52,7 +52,7 @@ export async function GET(req: NextRequest) {
         where,
         include: {
           transaction: {
-            include: { user: { select: { name: true, whatsapp: true } } },
+            include: { user: { select: { id: true, name: true, whatsapp: true } } },
           },
           oldAccount: { select: { accountEmail: true } },
           newAccount: { select: { accountEmail: true, accountPassword: true } },
@@ -97,16 +97,12 @@ export async function POST(req: NextRequest) {
     }
 
 
-    // Cek jika ada klaim PENDING untuk transaksi yang sama (hindari double-submit bersamaan)
+    // Cek jika ada klaim PENDING untuk transaksi yang sama
     const pendingClaim = await prisma.warrantyClaim.findFirst({
       where: { transactionId, status: "pending" },
     });
-    if (pendingClaim) {
-      return NextResponse.json(
-        { error: "Klaim garansi untuk transaksi ini sedang dalam proses. Harap tunggu sebentar." },
-        { status: 400 }
-      );
-    }
+    // Jika tidak pending, dan bukan request baru (misal via UI mungkin tidak tahu ini pending atau ga), 
+    // tapi kalau sudah "resolved" biarkan bikin baru karena ini klaim garansi yang kesekian kalinya.
 
     // 2. Tentukan productType dari akun lama agar akun pengganti sesuai tipe produk
     const oldProductType = transaction.stockAccount?.productType ?? "mobile";
@@ -131,20 +127,28 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: `Stok akun ${oldProductType} habis! Semua akun ${oldProductType} sudah penuh.` }, { status: 400 });
     }
 
-    // 3. Buat klaim garansi
-    const claim = await prisma.warrantyClaim.create({
-      data: {
-        transactionId,
-        oldAccountId: transaction.stockAccountId,
-        newAccountId: newAccount.id,
-        claimReason: claimReason || "Tidak disebutkan",
-        status: "resolved",
-      },
-      include: {
-        oldAccount: true,
-        newAccount: true,
-      },
-    });
+    // 3. Buat atau Update klaim garansi (jika ada pending, update; jika tidak, buat baru)
+    const claimData = {
+      transactionId,
+      oldAccountId: transaction.stockAccountId,
+      newAccountId: newAccount.id,
+      claimReason: pendingClaim?.claimReason || claimReason || "Tidak disebutkan",
+      status: "resolved",
+    };
+
+    let claim;
+    if (pendingClaim) {
+      claim = await prisma.warrantyClaim.update({
+        where: { id: pendingClaim.id },
+        data: claimData,
+        include: { oldAccount: true, newAccount: true },
+      });
+    } else {
+      claim = await prisma.warrantyClaim.create({
+        data: claimData,
+        include: { oldAccount: true, newAccount: true },
+      });
+    }
 
     // 4. Update akun lama: kurangi slot, jangan ban jika masih ada sisa slot
     if (transaction.stockAccountId) {

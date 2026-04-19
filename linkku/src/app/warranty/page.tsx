@@ -14,7 +14,18 @@ import {
   Loader2,
   LayoutList,
   LayoutGrid,
+  User,
+  Receipt
 } from "lucide-react";
+
+interface TransactionHistory {
+  id: string;
+  purchaseDate: string | null;
+  amount: number;
+  status: string;
+  stockAccount: { accountEmail: string; productType: string } | null;
+  warrantyClaims: { id: string; status: string }[];
+}
 
 interface WarrantyItem {
   id: string;
@@ -24,7 +35,7 @@ interface WarrantyItem {
   transaction: {
     id: string;
     lynkIdRef: string | null;
-    user: { name: string; whatsapp: string | null } | null;
+    user: { id: string; name: string; whatsapp: string | null } | null;
   } | null;
   oldAccount: { accountEmail: string } | null;
   newAccount: { accountEmail: string; accountPassword: string } | null;
@@ -50,6 +61,59 @@ export default function WarrantyPage() {
   const [claimForm, setClaimForm] = useState({ transactionId: "", claimReason: "" });
   const [claimResult, setClaimResult] = useState<{ newAccount?: { email: string; password: string }; message?: string } | null>(null);
   const [viewMode, setViewMode] = useState<'table' | 'card'>('table');
+
+  // Modal State
+  const [showUserModal, setShowUserModal] = useState(false);
+  const [selectedUser, setSelectedUser] = useState<{ id: string; name: string } | null>(null);
+  const [userTransactions, setUserTransactions] = useState<TransactionHistory[]>([]);
+  const [loadingUser, setLoadingUser] = useState(false);
+  const [accLoading, setAccLoading] = useState<string | null>(null);
+
+  const formatCurrency = (amount: number) =>
+    new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", minimumFractionDigits: 0 }).format(amount);
+  const formatDate = (dateStr: string | null) =>
+    dateStr ? new Date(dateStr).toLocaleDateString("id-ID") : "-";
+
+  async function handleOpenUser(user: { id: string; name: string }) {
+    setSelectedUser(user);
+    setShowUserModal(true);
+    setLoadingUser(true);
+    try {
+      const res = await fetch(`/api/users/${user.id}/transactions`);
+      const json = await res.json();
+      if (res.ok) {
+        setUserTransactions(json.transactions || []);
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoadingUser(false);
+    }
+  }
+
+  async function handleAcc(transactionId: string) {
+    if (!confirm("Proses ACC garansi untuk transaksi ini?")) return;
+    setAccLoading(transactionId);
+    try {
+      const res = await fetch("/api/warranty", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ transactionId }),
+      });
+      const json = await res.json();
+      if (res.ok) {
+        alert("Berhasil ACC! Akun baru: " + json.newAccount?.email);
+        fetchData();
+        if (selectedUser) handleOpenUser(selectedUser);
+      } else {
+        alert(json.error || "Gagal memproses klaim");
+      }
+    } catch {
+      alert("Koneksi error");
+    } finally {
+      setAccLoading(null);
+    }
+  }
 
   const fetchData = useCallback(() => {
     setLoading(true);
@@ -135,7 +199,7 @@ export default function WarrantyPage() {
                       <th>Akun Lama → Baru</th>
                       <th>Alasan</th>
                       <th>Tanggal</th>
-                      <th className="sticky-col-head">Status</th>
+                      <th className="sticky-col-head">Aksi</th>
                     </tr></thead>
                     <tbody>
                       {claims.length===0 ? (
@@ -153,7 +217,19 @@ export default function WarrantyPage() {
                           </td>
                           <td className="text-[var(--text-secondary)] text-sm max-w-[160px] truncate">{claim.claimReason||"-"}</td>
                           <td className="text-[var(--text-secondary)] text-sm">{claim.createdAt?new Date(claim.createdAt).toLocaleDateString("id-ID"):"-"}</td>
-                          <td className="sticky-col-body">{getClaimBadge(claim.status)}</td>
+                          <td className="sticky-col-body">
+                            <div className="flex items-center gap-2">
+                              {getClaimBadge(claim.status)}
+                              {claim.transaction?.user?.id && (
+                                <button
+                                  className="btn-secondary !py-1 !px-2 text-xs flex items-center gap-1"
+                                  onClick={() => handleOpenUser({ id: claim.transaction!.user!.id, name: claim.transaction!.user!.name })}
+                                >
+                                  <User size={12} /> Cek User
+                                </button>
+                              )}
+                            </div>
+                          </td>
                         </tr>
                       ))}
                     </tbody>
@@ -169,7 +245,17 @@ export default function WarrantyPage() {
                           <p className="font-semibold text-white text-sm truncate">{claim.transaction?.user?.name||"-"}</p>
                           <p className="text-xs text-[var(--text-muted)]">{maskPhone(claim.transaction?.user?.whatsapp)}</p>
                         </div>
-                        {getClaimBadge(claim.status)}
+                        <div className="flex items-center gap-2">
+                          {getClaimBadge(claim.status)}
+                          {claim.transaction?.user?.id && (
+                            <button
+                              className="btn-secondary !py-1 !px-2 text-xs flex items-center gap-1"
+                              onClick={() => handleOpenUser({ id: claim.transaction!.user!.id, name: claim.transaction!.user!.name })}
+                            >
+                              <User size={12} /> Cek User
+                            </button>
+                          )}
+                        </div>
                       </div>
                       <div className="space-y-1.5 pt-2.5 border-t border-[rgba(99,102,241,0.08)]">
                         <div className="data-card-row"><span className="data-card-label">ID Transaksi</span><span className="data-card-value font-mono text-xs text-[#818cf8]">{claim.transaction?.lynkIdRef||claim.transaction?.id?.substring(0,8)||"-"}</span></div>
@@ -242,6 +328,76 @@ export default function WarrantyPage() {
                   Proses & Ganti Akun
                 </button>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+    {/* Modal Histori Transaksi Pelanggan */}
+      {showUserModal && selectedUser && (
+        <div className="modal-overlay" onClick={() => setShowUserModal(false)}>
+          <div className="modal-content" style={{ maxWidth: 700 }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3 className="font-semibold text-white text-lg flex items-center gap-2">
+                <Receipt size={18} className="text-[#818cf8]" /> Histori Transaksi: {selectedUser.name}
+              </h3>
+              <button className="btn-icon" onClick={() => setShowUserModal(false)}><X size={18} /></button>
+            </div>
+            <div className="modal-body">
+              {loadingUser ? (
+                <div className="flex items-center justify-center py-12"><Loader2 size={24} className="animate-spin text-[#818cf8]" /></div>
+              ) : userTransactions.length === 0 ? (
+                <div className="text-center py-8 text-[var(--text-muted)]">Belum ada histori transaksi.</div>
+              ) : (
+                <div className="overflow-x-auto rounded-xl border border-[var(--border-color)]">
+                  <table className="data-table w-full text-sm">
+                    <thead>
+                      <tr>
+                        <th>Tanggal</th>
+                        <th>Nominal</th>
+                        <th>Akun (Email)</th>
+                        <th>Status</th>
+                        <th>Aksi Klaim</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {userTransactions.map(trx => {
+                        const hasPendingClaim = trx.warrantyClaims?.some(c => c.status === "pending");
+                        return (
+                        <tr key={trx.id}>
+                          <td className="text-[var(--text-secondary)]">{formatDate(trx.purchaseDate)}</td>
+                          <td className="font-semibold">{formatCurrency(trx.amount)}</td>
+                          <td className="font-mono text-xs text-[var(--text-secondary)]">
+                            <span className="block text-white mb-0.5 capitalize">{trx.stockAccount?.productType || "-"}</span>
+                            {trx.stockAccount?.accountEmail || "-"}
+                          </td>
+                          <td>
+                            {trx.status === "success"
+                              ? <span className="badge badge-success !text-[10px] !py-0.5">Sukses</span>
+                              : <span className="badge badge-danger !text-[10px] !py-0.5">Gagal</span>}
+                          </td>
+                          <td>
+                            {hasPendingClaim ? (
+                              <button
+                                className="btn-success !py-1 !px-2 text-xs flex items-center gap-1"
+                                onClick={() => handleAcc(trx.id)}
+                                disabled={accLoading === trx.id}
+                              >
+                                {accLoading === trx.id ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />}
+                                ACC
+                              </button>
+                            ) : (
+                              <span className="text-[10px] text-[var(--text-muted)]">Tidak ada pending</span>
+                            )}
+                          </td>
+                        </tr>
+                      )})}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+            <div className="modal-footer">
+              <button className="btn-secondary" onClick={() => setShowUserModal(false)}>Tutup</button>
             </div>
           </div>
         </div>
