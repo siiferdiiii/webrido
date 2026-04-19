@@ -138,7 +138,7 @@ export default function TransactionsPage() {
   
   const [showModal, setShowModal] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [result, setResult] = useState<{ success?: boolean; userId?: string; message?: string } | null>(null);
+  const [result, setResult] = useState<{ success?: boolean; userId?: string; message?: string; account?: { email?: string; password?: string } } | null>(null);
   const [form, setForm] = useState({ name: "", email: "", whatsapp: "", amount: "", productName: "" });
 
   // State untuk kirim akun setelah transaksi berhasil
@@ -262,7 +262,7 @@ export default function TransactionsPage() {
       });
       const json = await res.json();
       if (res.ok) {
-        setResult({ success: true, userId: json.userId, message: json.message || "Data transaksi berhasil ditambahkan, kirim data akun ke pelanggan?" });
+        setResult({ success: true, userId: json.userId, message: json.message || "Data transaksi berhasil ditambahkan, kirim data akun ke pelanggan?", account: json.account });
         fetchData(1, false);
       } else {
         setResult({ message: json.error || "Gagal membuat transaksi" });
@@ -272,23 +272,13 @@ export default function TransactionsPage() {
   }
 
   async function handleSendAccount() {
+    if (!result?.account?.email) return;
     setSendingAccount(true);
     setSendResult(null);
     try {
-      // 1. Ambil stok akun tersedia sesuai tipe + template dari settings (parallel)
-      const [stockRes, settingsRes] = await Promise.all([
-        fetch(`/api/stock?status=available&productType=${accountType}&limit=1`),
-        fetch("/api/settings"),
-      ]);
-      const stockJson = await stockRes.json();
+      // 1. Ambil template dari settings
+      const settingsRes = await fetch("/api/settings");
       const settingsJson = await settingsRes.json();
-      const account = stockJson.accounts?.[0];
-
-      if (!account) {
-        setSendResult({ sent: false, message: `Tidak ada stok ${accountType === 'mobile' ? 'Mobile' : 'Desktop'} yang tersedia` });
-        setSendingAccount(false);
-        return;
-      }
 
       // 2. Render template pesan dengan variabel dinamis
       const templateRaw: string = settingsJson.template_send_account || "";
@@ -296,10 +286,10 @@ export default function TransactionsPage() {
       const renderedMessage = templateRaw
         .replaceAll("{{nama}}", form.name)
         .replaceAll("{{email}}", form.email)
-        .replaceAll("{{akun_email}}", account.accountEmail)
-        .replaceAll("{{akun_password}}", account.accountPassword)
+        .replaceAll("{{akun_email}}", result.account.email || "")
+        .replaceAll("{{akun_password}}", result.account.password || "")
         .replaceAll("{{tipe}}", tipeLabel)
-        .replaceAll("{{durasi}}", String(account.durationDays || 30));
+        .replaceAll("{{durasi}}", "30");
 
       // 3. Kirim ke webhook dengan template message
       const whatsapp = form.whatsapp.replace(/^0/, "62").replace(/\D/g, "");
@@ -310,22 +300,15 @@ export default function TransactionsPage() {
           name: form.name,
           email: form.email,
           phone: whatsapp,
-          accountEmail: account.accountEmail,
-          accountPassword: account.accountPassword,
+          accountEmail: result.account.email,
+          accountPassword: result.account.password,
           productType: accountType,
-          durationDays: account.durationDays || 30,
+          durationDays: 30,
           message: renderedMessage, // template yang sudah di-render
         }),
       });
 
-      // 4. Update usedSlots di stok (tandai slot terpakai)
-      await fetch(`/api/stock/${account.id}/use`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId: result?.userId }),
-      }).catch(() => {}); // non-blocking jika endpoint belum ada
-
-      setSendResult({ sent: true, accountEmail: account.accountEmail, message: "Akun berhasil dikirim via webhook!" });
+      setSendResult({ sent: true, accountEmail: result.account.email, message: "Akun berhasil dikirim via webhook!" });
     } catch (err) {
       setSendResult({ sent: false, message: `Gagal mengirim: ${err instanceof Error ? err.message : String(err)}` });
     }
@@ -1343,40 +1326,14 @@ export default function TransactionsPage() {
                     <p className="font-semibold text-emerald-300 text-sm">{result.message}</p>
                   </div>
 
-                  {!sendResult && (
+                  {!sendResult && result.account && (
                     <>
-                      <p className="text-sm text-[var(--text-secondary)]">Pilih jenis akun yang akan dikirim ke pelanggan:</p>
-
-                      {/* Toggle Mobile / Desktop */}
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => setAccountType('mobile')}
-                          className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-semibold border transition-all`}
-                          style={{
-                            background: accountType === 'mobile' ? 'rgba(34,197,94,0.12)' : 'rgba(255,255,255,0.03)',
-                            border: `1px solid ${accountType === 'mobile' ? 'rgba(34,197,94,0.4)' : 'rgba(255,255,255,0.08)'}`,
-                            color: accountType === 'mobile' ? '#22c55e' : 'var(--text-muted)',
-                          }}
-                        >
-                          <Smartphone size={16} /> Mobile
-                          <span style={{ fontSize: 10 }}>(HP/iPad)</span>
-                        </button>
-                        <button
-                          onClick={() => setAccountType('desktop')}
-                          className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-semibold border transition-all`}
-                          style={{
-                            background: accountType === 'desktop' ? 'rgba(99,102,241,0.12)' : 'rgba(255,255,255,0.03)',
-                            border: `1px solid ${accountType === 'desktop' ? 'rgba(99,102,241,0.4)' : 'rgba(255,255,255,0.08)'}`,
-                            color: accountType === 'desktop' ? '#818cf8' : 'var(--text-muted)',
-                          }}
-                        >
-                          <Monitor size={16} /> Desktop
-                          <span style={{ fontSize: 10 }}>(PC/Mac)</span>
-                        </button>
+                      <p className="text-sm text-[var(--text-secondary)]">Akun berikut telah berhasil ditugaskan ke pelanggan ini:</p>
+                      <div className="p-3 bg-[rgba(255,255,255,0.05)] rounded-lg">
+                        <p className="text-sm font-mono text-white">{result.account.email}</p>
                       </div>
-
-                      <p className="text-[11px] text-[var(--text-muted)]">
-                        Akun <strong style={{ color: accountType === 'mobile' ? '#22c55e' : '#818cf8' }}>{accountType === 'mobile' ? 'Mobile' : 'Desktop'}</strong> tersedia akan diambil dari stok dan dikirim otomatis ke pelanggan via webhook.
+                      <p className="text-[11px] text-[var(--text-muted)] mt-1">
+                        Klik tombol <strong>Kirim Akun</strong> di bawah untuk mengirim data login WhatsApp.
                       </p>
                     </>
                   )}

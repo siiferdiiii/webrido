@@ -33,7 +33,20 @@ export async function resolveProductSku(productName: string): Promise<{ sku: str
     if (setting && setting.value) {
       const products = JSON.parse(setting.value);
       const searchName = (productName || "").trim().toLowerCase();
-      const matched = products.find((p: any) => searchName.includes(p.name.toLowerCase()));
+      
+      // 1. Exact match
+      let matched = products.find((p: any) => p.name.toLowerCase() === searchName);
+      
+      // 2. Contains match (product name contains DB name)
+      if (!matched) {
+        matched = products.find((p: any) => searchName.includes(p.name.toLowerCase()));
+      }
+      
+      // 3. Reverse contains match (DB name contains product name)
+      if (!matched) {
+         matched = products.find((p: any) => p.name.toLowerCase().includes(searchName));
+      }
+      
       if (matched) targetSku = matched.id;
     }
   } catch (e) {
