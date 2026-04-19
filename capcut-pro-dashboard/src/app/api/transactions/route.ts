@@ -134,7 +134,7 @@ export async function POST(req: NextRequest) {
       // Diurutkan usedSlots ASC supaya akun dengan slot paling sedikit dipilih duluan (round-robin)
       const candidateAccounts = await tx.stockAccount.findMany({
         where: {
-          status: { in: ["available", "in_use"] },
+          status: "available",
           productType: detectedProductType, // FIX #4: filter by productType
         },
         orderBy: [{ usedSlots: "asc" }, { createdAt: "asc" }],
@@ -179,7 +179,7 @@ export async function POST(req: NextRequest) {
           usedSlots: { lt: maxSlots }, // Atomic guard: hanya update jika slot masih tersedia
         },
         data: {
-          status: newUsedSlots >= maxSlots ? "full" : "in_use",
+          status: newUsedSlots >= maxSlots ? "sold" : "available",
           usedSlots: { increment: 1 },
         },
       });

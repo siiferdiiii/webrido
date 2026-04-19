@@ -115,8 +115,7 @@ export async function POST(req: NextRequest) {
     }
 
     // ===== 3. SHARING ACCOUNT: Cari stok yang masih ada slot kosong =====
-    // FIX #5: Ubah dari "available" saja ke "available + in_use" agar akun yang sudah
-    // punya 1 pengguna bisa menerima pengguna baru (jika masih ada slot kosong)
+    // Cari akun yang masih ada slot kosong (status "available")
     const maxSlotsForType = productType === "desktop" ? 2 : 3;
 
     // FIX #1: Gunakan $transaction untuk atomic slot assignment
@@ -125,7 +124,7 @@ export async function POST(req: NextRequest) {
       let candidateAccounts = await tx.stockAccount.findMany({
         where: {
           productType,
-          status: { in: ["available", "in_use"] }, // FIX #5: sertakan in_use
+          status: "available",
           durationDays,
         },
         orderBy: [{ usedSlots: "asc" }, { createdAt: "asc" }],
@@ -134,7 +133,7 @@ export async function POST(req: NextRequest) {
       // Fallback 1: tipe sama, tanpa filter durasi
       if (candidateAccounts.length === 0) {
         candidateAccounts = await tx.stockAccount.findMany({
-          where: { productType, status: { in: ["available", "in_use"] } },
+          where: { productType, status: "available" },
           orderBy: [{ usedSlots: "asc" }, { createdAt: "asc" }],
         });
       }
@@ -142,7 +141,7 @@ export async function POST(req: NextRequest) {
       // Fallback 2: tipe apapun
       if (candidateAccounts.length === 0) {
         candidateAccounts = await tx.stockAccount.findMany({
-          where: { status: { in: ["available", "in_use"] } },
+          where: { status: "available" },
           orderBy: [{ usedSlots: "asc" }, { createdAt: "asc" }],
         });
       }
@@ -182,7 +181,7 @@ export async function POST(req: NextRequest) {
         },
         data: {
           usedSlots: newUsedSlots,
-          status: newUsedSlots >= accountMaxSlots ? "full" : "in_use", // FIX: "in_use" bukan "available"
+          status: newUsedSlots >= accountMaxSlots ? "sold" : "available",
         },
       });
       if (updated.count === 0) throw new Error("SLOT_PENUH"); // Rollback jika race condition

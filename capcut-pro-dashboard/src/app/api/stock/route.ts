@@ -60,40 +60,57 @@ export async function GET(req: NextRequest) {
       }),
     ]);
 
-    // ── Helper: hitung status "efektif" (override in_use → full jika slot penuh) ──
+    // ── Helper: hitung status berdasarkan usedSlots vs maxSlots ──
     function effectiveStatus(acc: { status: string | null; usedSlots: number | null; maxSlots: number | null }, defaultMax: number) {
       const used = acc.usedSlots ?? 0;
       const max = acc.maxSlots ?? defaultMax;
-      if (acc.status === "in_use" && used >= max) return "full_stale"; // data stale di DB
-      return acc.status ?? "unknown";
+      // Hanya 2 status: available (masih ada slot) atau sold (penuh)
+      if (used < max) return "available";
+      return "sold";
     }
 
-    // ── Auto-fix background: update status akun yang stale (in_use tapi slot penuh) ──
-    const staleMobileIds = allMobileRaw
-      .filter(a => a.status === "in_use" && (a.usedSlots ?? 0) >= (a.maxSlots ?? 3))
+    // ── Auto-fix background: update status akun yang stale (in_use/full → available/sold) ──
+    const staleIds = [...allMobileRaw, ...allDesktopRaw]
+      .filter(a => {
+        const defaultMax = a.status === "desktop" ? 2 : 3;
+        const used = a.usedSlots ?? 0;
+        const max = a.maxSlots ?? defaultMax;
+        const correctStatus = used < max ? "available" : "sold";
+        return a.status !== correctStatus; // status di DB tidak sesuai
+      })
       .map(a => a.id);
-    const staleDesktopIds = allDesktopRaw
-      .filter(a => a.status === "in_use" && (a.usedSlots ?? 0) >= (a.maxSlots ?? 2))
-      .map(a => a.id);
-    const staleIds = [...staleMobileIds, ...staleDesktopIds];
+
     if (staleIds.length > 0) {
-      // Fire-and-forget: jangan await agar tidak lambat response
-      prisma.stockAccount.updateMany({
-        where: { id: { in: staleIds } },
-        data: { status: "full" },
-      }).catch(e => console.error("[stock] auto-fix stale status error:", e));
+      // Fix akun yang harusnya available (masih ada slot kosong)
+      const shouldBeAvailable = [...allMobileRaw, ...allDesktopRaw]
+        .filter(a => staleIds.includes(a.id) && (a.usedSlots ?? 0) < (a.maxSlots ?? 3))
+        .map(a => a.id);
+      const shouldBeSold = staleIds.filter(id => !shouldBeAvailable.includes(id));
+
+      if (shouldBeAvailable.length > 0) {
+        prisma.stockAccount.updateMany({
+          where: { id: { in: shouldBeAvailable } },
+          data: { status: "available" },
+        }).catch(e => console.error("[stock] auto-fix to available error:", e));
+      }
+      if (shouldBeSold.length > 0) {
+        prisma.stockAccount.updateMany({
+          where: { id: { in: shouldBeSold } },
+          data: { status: "sold" },
+        }).catch(e => console.error("[stock] auto-fix to sold error:", e));
+      }
     }
 
-    // ── Hitung stats Mobile (akurat berdasarkan usedSlots vs maxSlots) ──────
+    // ── Hitung stats Mobile (berdasarkan usedSlots vs maxSlots) ──────
     const mobileStatusCounts: Record<string, number> = { available: 0, sold: 0 };
     for (const acc of allMobileRaw) {
       const eff = effectiveStatus(acc, 3);
       if (eff === "available") mobileStatusCounts.available++;
-      else mobileStatusCounts.sold++; // in_use, sold, full, full_stale, banned, expired
+      else mobileStatusCounts.sold++;
     }
     const mobileTotal = allMobileRaw.length;
 
-    // ── Hitung stats Desktop (akurat berdasarkan usedSlots vs maxSlots) ─────
+    // ── Hitung stats Desktop (berdasarkan usedSlots vs maxSlots) ─────
     const desktopStatusCounts: Record<string, number> = { available: 0, sold: 0 };
     for (const acc of allDesktopRaw) {
       const eff = effectiveStatus(acc, 2);
@@ -108,15 +125,14 @@ export async function GET(req: NextRequest) {
       sold: mobileStatusCounts.sold + desktopStatusCounts.sold,
     };
 
-    // ── Sisa slot (hanya dari akun yang status-nya available/in_use, bukan sold/full/banned/expired) ─
-    const assignableStatuses = ["available", "in_use"];
+    // ── Sisa slot (hanya dari akun yang status available) ─────────────────────
     const remainingSlotsMobile = allMobileRaw
-      .filter(acc => assignableStatuses.includes(acc.status ?? ""))
+      .filter(acc => effectiveStatus(acc, 3) === "available")
       .reduce((sum, acc) => {
         return sum + Math.max(0, (acc.maxSlots ?? 3) - (acc.usedSlots ?? 0));
       }, 0);
     const remainingSlotsDesktop = allDesktopRaw
-      .filter(acc => assignableStatuses.includes(acc.status ?? ""))
+      .filter(acc => effectiveStatus(acc, 2) === "available")
       .reduce((sum, acc) => {
         return sum + Math.max(0, (acc.maxSlots ?? 2) - (acc.usedSlots ?? 0));
       }, 0);

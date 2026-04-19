@@ -63,9 +63,10 @@ const statusFilters = ["Semua", "available", "sold"];
 const statusLabels: Record<string, string> = { Semua: "Semua", available: "Tersedia", sold: "Sold" };
 
 function getEffectiveStatus(status: string | null, usedSlots: number | null, maxSlots: number | null) {
-  // Override: jika slot penuh tapi DB masih "in_use" (data stale)
-  if (status === "in_use" && (usedSlots ?? 0) >= (maxSlots ?? 3)) return "full";
-  return status;
+  const used = usedSlots ?? 0;
+  const max = maxSlots ?? 3;
+  if (used < max) return "available";
+  return "sold";
 }
 
 function getStockBadge(status: string | null, usedSlots?: number | null, maxSlots?: number | null) {
@@ -73,9 +74,6 @@ function getStockBadge(status: string | null, usedSlots?: number | null, maxSlot
   switch (eff) {
     case "available": return <span className="badge badge-success">Tersedia</span>;
     case "sold": return <span className="badge badge-neutral">Sold</span>;
-    case "full": return <span className="badge badge-neutral">Full</span>;
-    case "banned": return <span className="badge badge-danger">Banned</span>;
-    case "expired": return <span className="badge badge-warning">Expired</span>;
     default: return <span className="badge badge-neutral">{eff}</span>;
   }
 }
@@ -964,9 +962,7 @@ export default function StockPage() {
                   <AlertTriangle size={14} className="text-amber-400 flex-shrink-0 mt-0.5" />
                   <p className="text-xs text-amber-300">
                     Akun ini masih dipakai <strong>{deleteConfirm.usedSlots} pelanggan</strong>.
-                    Pastikan slot sudah tidak aktif sebelum menghapus, atau akun
-                    {" "}
-                    <span className="text-rose-400 font-semibold">in_use</span> tidak dapat dihapus.
+                    Pastikan slot sudah kosong sebelum menghapus.
                   </p>
                 </div>
               )}
