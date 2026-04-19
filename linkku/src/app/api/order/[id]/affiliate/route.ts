@@ -61,7 +61,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
     return NextResponse.json({
       success: true,
-      redirect: "/affiliate-portal/dashboard",
+      redirect: "/affiliate/",
     });
   } catch (error) {
     console.error("Auto Affiliate POST error:", error);
