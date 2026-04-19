@@ -29,7 +29,7 @@ const navItems: { href: string; label: string; icon: React.ElementType; permissi
   { href: "/", label: "Dashboard", icon: LayoutDashboard }, // Always visible
   { href: "/transactions", label: "Transaksi", icon: ArrowLeftRight, permission: "page_transactions" },
   { href: "/users", label: "Pelanggan", icon: Users, permission: "page_customers" },
-  { href: "/stock", label: "Stok Akun", icon: Package, permission: "page_stock" },
+  { href: "/stock", label: "Kelola Produk", icon: Package, permission: "page_stock" },
   { href: "/warranty", label: "Klaim Garansi", icon: ShieldCheck, permission: "page_stock" },
   { href: "/messages", label: "Riwayat Pesan", icon: MessageSquare, permission: "page_messages" },
 ];

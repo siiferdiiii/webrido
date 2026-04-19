@@ -446,7 +446,7 @@ export default function StockPage() {
 
   return (
     <>
-      <Topbar title="Stok Akun" subtitle="Kelola stok akun CapCut Pro (Sharing Account)" />
+      <Topbar title="Kelola Produk" subtitle="Kelola produk & stok akun CapCut Pro" />
 
       <div className="px-4 md:px-8 pb-8 space-y-5">
         {/* ── 3 Info Cards (Mobile, Desktop, Overall) ───────────────── */}
@@ -849,7 +849,7 @@ export default function StockPage() {
         <div className="modal-overlay" onClick={() => setShowSingleModal(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h3 className="font-semibold text-white text-lg">Tambah Stok Akun</h3>
+              <h3 className="font-semibold text-white text-lg">Tambah Akun</h3>
               <button className="btn-icon" onClick={() => setShowSingleModal(false)}><X size={18} /></button>
             </div>
             <div className="modal-body space-y-4">
@@ -897,7 +897,7 @@ export default function StockPage() {
         <div className="modal-overlay" onClick={() => setShowBulkModal(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h3 className="font-semibold text-white text-lg">Bulk Import Stok Akun</h3>
+              <h3 className="font-semibold text-white text-lg">Bulk Import Akun</h3>
               <button className="btn-icon" onClick={() => setShowBulkModal(false)}><X size={18} /></button>
             </div>
             <div className="modal-body space-y-4">
@@ -950,7 +950,7 @@ export default function StockPage() {
                   <AlertTriangle size={18} className="text-rose-400" />
                 </div>
                 <div>
-                  <h3 className="font-semibold text-white">Hapus Stok Akun?</h3>
+                  <h3 className="font-semibold text-white">Hapus Akun?</h3>
                   <p className="text-xs text-[var(--text-muted)]">Tindakan ini tidak bisa dibatalkan</p>
                 </div>
               </div>
