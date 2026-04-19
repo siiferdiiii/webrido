@@ -404,7 +404,7 @@ export default function SettingsPage() {
   function openAddProduct() {
     setEditProductIdx(null);
     setProductForm({
-      id: `product-${Date.now()}`, name: "", description: "", price: 0,
+      id: "", name: "", description: "", price: 0,
       duration: 30, type: "mobile", features: [], popular: false,
     });
     setFeatureInput("");
@@ -1026,7 +1026,10 @@ export default function SettingsPage() {
                           {product.type === "desktop" ? <Monitor size={13} style={{ color: "#3b82f6" }} /> : <Smartphone size={13} style={{ color: "#22c55e" }} />}
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-white truncate">{product.name}</p>
+                          <div className="flex items-center gap-2">
+                            <p className="text-sm font-medium text-white truncate">{product.name}</p>
+                            <span className="text-[9px] font-mono px-1.5 py-0.5 rounded" style={{ background: "rgba(255,255,255,0.05)", color: "rgba(255,255,255,0.4)", border: "1px solid rgba(255,255,255,0.08)" }}>{product.id}</span>
+                          </div>
                           <p className="text-[10px] text-[var(--text-muted)]">
                             Rp {product.price.toLocaleString("id-ID")} · {product.duration} hari
                             {product.popular && <span className="ml-1 text-amber-400">⭐</span>}
@@ -1058,7 +1061,7 @@ export default function SettingsPage() {
                 </button>
 
                 {/* Product Edit Form (inline) */}
-                {(editProductIdx !== null || productForm.id.startsWith("product-")) && productForm.id && (
+                {(editProductIdx !== null || productForm.name !== undefined) && (editProductIdx !== null || productForm.id === "") && (
                   <div className="p-4 rounded-xl space-y-3" style={{ background: "rgba(34,197,94,0.05)", border: "1px solid rgba(34,197,94,0.15)" }}>
                     <p className="text-xs font-semibold text-emerald-400 uppercase tracking-wider">
                       {editProductIdx !== null ? "Edit Produk" : "Produk Baru"}
@@ -1066,13 +1069,18 @@ export default function SettingsPage() {
 
                     <div className="grid grid-cols-2 gap-2">
                       <div>
-                        <label className="form-label text-[10px]">Nama</label>
-                        <input type="text" className="form-input text-sm" value={productForm.name} onChange={e => setProductForm(p => ({ ...p, name: e.target.value }))} placeholder="CapCut Pro Mobile" />
+                        <label className="form-label text-[10px]">Kode SKU</label>
+                        <input type="text" className="form-input text-sm font-mono uppercase" value={productForm.id} onChange={e => setProductForm(p => ({ ...p, id: e.target.value.toUpperCase().replace(/\s+/g, '-') }))} placeholder="CPM-30" />
                       </div>
                       <div>
                         <label className="form-label text-[10px]">Harga (Rp)</label>
                         <input type="number" className="form-input text-sm" value={productForm.price} onChange={e => setProductForm(p => ({ ...p, price: parseInt(e.target.value) || 0 }))} />
                       </div>
+                    </div>
+
+                    <div>
+                      <label className="form-label text-[10px]">Nama Produk</label>
+                      <input type="text" className="form-input text-sm" value={productForm.name} onChange={e => setProductForm(p => ({ ...p, name: e.target.value }))} placeholder="CapCut Pro Mobile" />
                     </div>
 
                     <div className="grid grid-cols-2 gap-2">
@@ -1120,7 +1128,7 @@ export default function SettingsPage() {
                     <div className="flex gap-2">
                       <button
                         onClick={handleSaveProduct}
-                        disabled={savingProducts || !productForm.name || !productForm.price}
+                        disabled={savingProducts || !productForm.name || !productForm.price || !productForm.id}
                         className="flex-1 flex items-center justify-center gap-1.5 h-8 rounded-lg text-xs font-semibold"
                         style={{ background: "rgba(34,197,94,0.2)", border: "1px solid rgba(34,197,94,0.4)", color: "#22c55e" }}
                       >

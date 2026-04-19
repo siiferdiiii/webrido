@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/db";
 import { NextResponse } from "next/server";
 
-// GET /api/products — Public product catalog
+// GET /api/products — Public product catalog with live stock counts
 export async function GET() {
   try {
     // Get product data from app_settings or return defaults
@@ -11,7 +11,7 @@ export async function GET() {
 
     let products = [
       {
-        id: "capcut-mobile-30",
+        id: "CPM-30",
         name: "CapCut Pro Mobile",
         description: "Akses semua fitur premium CapCut di HP/iPad/Tablet selama 30 hari",
         price: 15000,
@@ -21,33 +21,13 @@ export async function GET() {
         popular: false,
       },
       {
-        id: "capcut-desktop-30",
+        id: "CPD-30",
         name: "CapCut Pro Desktop",
         description: "Akses semua fitur premium CapCut di PC/Laptop/Mac selama 30 hari",
         price: 20000,
         duration: 30,
         type: "desktop",
         features: ["Semua filter & efek premium", "Export 4K tanpa watermark", "Cloud Storage 100GB", "AI Tools + Desktop plugins"],
-        popular: true,
-      },
-      {
-        id: "capcut-mobile-90",
-        name: "CapCut Pro Mobile 3 Bulan",
-        description: "Hemat 20%! Akses premium CapCut di HP/iPad selama 90 hari",
-        price: 35000,
-        duration: 90,
-        type: "mobile",
-        features: ["Semua filter & efek premium", "Export tanpa watermark", "Cloud Storage 100GB", "AI Tools lengkap", "Hemat 20%"],
-        popular: false,
-      },
-      {
-        id: "capcut-desktop-90",
-        name: "CapCut Pro Desktop 3 Bulan",
-        description: "Hemat 25%! Akses premium CapCut di PC/Mac selama 90 hari",
-        price: 45000,
-        duration: 90,
-        type: "desktop",
-        features: ["Semua filter & efek premium", "Export 4K tanpa watermark", "Cloud Storage 100GB", "AI Tools + Desktop plugins", "Hemat 25%"],
         popular: true,
       },
     ];
@@ -58,7 +38,33 @@ export async function GET() {
       } catch { /* use defaults */ }
     }
 
-    return NextResponse.json({ products });
+    // Fetch live stock counts per product type
+    const stockCounts = await prisma.stockAccount.groupBy({
+      by: ["productType"],
+      where: { status: "available" },
+      _sum: { maxSlots: true, usedSlots: true },
+      _count: true,
+    });
+
+    // Build a map: productType -> available slots
+    const stockMap: Record<string, { accounts: number; slots: number }> = {};
+    for (const row of stockCounts) {
+      const type = row.productType || "mobile";
+      const totalSlots = row._sum.maxSlots || 0;
+      const usedSlots = row._sum.usedSlots || 0;
+      stockMap[type] = {
+        accounts: row._count,
+        slots: Math.max(0, totalSlots - usedSlots),
+      };
+    }
+
+    // Attach stock info to each product
+    const productsWithStock = products.map((p) => ({
+      ...p,
+      stock: stockMap[p.type] || { accounts: 0, slots: 0 },
+    }));
+
+    return NextResponse.json({ products: productsWithStock });
   } catch (error) {
     console.error("Products error:", error);
     return NextResponse.json({ products: [] });

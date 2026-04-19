@@ -14,6 +14,7 @@ import {
   ArrowRight,
   Search,
   X,
+  Package,
 } from "lucide-react";
 
 interface Product {
@@ -25,6 +26,7 @@ interface Product {
   type: string;
   features: string[];
   popular: boolean;
+  stock?: { accounts: number; slots: number };
 }
 
 function formatCurrency(amount: number) {
@@ -312,20 +314,25 @@ export default function MarketplacePage() {
             {products.map((product) => {
               const isSelected = selectedProduct?.id === product.id;
               const isMobile = product.type === "mobile";
+              const stockSlots = product.stock?.slots ?? 0;
+              const isOutOfStock = stockSlots <= 0;
 
               return (
                 <div
                   key={product.id}
                   onClick={() => {
-                    setSelectedProduct(product);
-                    setShowCheckout(true);
+                    if (!isOutOfStock) {
+                      setSelectedProduct(product);
+                      setShowCheckout(true);
+                    }
                   }}
                   style={{
                     position: "relative",
                     borderRadius: 20,
                     padding: "28px 24px",
-                    cursor: "pointer",
+                    cursor: isOutOfStock ? "not-allowed" : "pointer",
                     transition: "all 0.3s ease",
+                    opacity: isOutOfStock ? 0.5 : 1,
                     background: isSelected
                       ? "linear-gradient(135deg, rgba(99,102,241,0.15), rgba(139,92,246,0.1))"
                       : "rgba(255,255,255,0.025)",
@@ -358,25 +365,79 @@ export default function MarketplacePage() {
                     </div>
                   )}
 
-                  {/* Icon */}
+                  {/* SKU Badge */}
                   <div
                     style={{
-                      width: 44,
-                      height: 44,
-                      borderRadius: 14,
-                      display: "flex",
+                      display: "inline-flex",
                       alignItems: "center",
-                      justifyContent: "center",
-                      background: isMobile ? "rgba(34,197,94,0.1)" : "rgba(59,130,246,0.1)",
-                      border: `1px solid ${isMobile ? "rgba(34,197,94,0.2)" : "rgba(59,130,246,0.2)"}`,
-                      marginBottom: 16,
+                      gap: 4,
+                      padding: "3px 8px",
+                      borderRadius: 6,
+                      background: "rgba(255,255,255,0.04)",
+                      border: "1px solid rgba(255,255,255,0.08)",
+                      fontSize: 10,
+                      fontWeight: 600,
+                      fontFamily: "monospace",
+                      color: "rgba(255,255,255,0.4)",
+                      marginBottom: 12,
+                      letterSpacing: "0.5px",
                     }}
                   >
-                    {isMobile ? (
-                      <Smartphone size={20} style={{ color: "#22c55e" }} />
-                    ) : (
-                      <Monitor size={20} style={{ color: "#3b82f6" }} />
-                    )}
+                    SKU: {product.id}
+                  </div>
+
+                  {/* Icon + Stock */}
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
+                    <div
+                      style={{
+                        width: 44,
+                        height: 44,
+                        borderRadius: 14,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        background: isMobile ? "rgba(34,197,94,0.1)" : "rgba(59,130,246,0.1)",
+                        border: `1px solid ${isMobile ? "rgba(34,197,94,0.2)" : "rgba(59,130,246,0.2)"}`,
+                      }}
+                    >
+                      {isMobile ? (
+                        <Smartphone size={20} style={{ color: "#22c55e" }} />
+                      ) : (
+                        <Monitor size={20} style={{ color: "#3b82f6" }} />
+                      )}
+                    </div>
+
+                    {/* Stock indicator */}
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 5,
+                        padding: "4px 10px",
+                        borderRadius: 8,
+                        background: isOutOfStock
+                          ? "rgba(239,68,68,0.1)"
+                          : stockSlots <= 3
+                          ? "rgba(251,191,36,0.1)"
+                          : "rgba(34,197,94,0.08)",
+                        border: `1px solid ${isOutOfStock
+                          ? "rgba(239,68,68,0.25)"
+                          : stockSlots <= 3
+                          ? "rgba(251,191,36,0.25)"
+                          : "rgba(34,197,94,0.2)"}`,
+                      }}
+                    >
+                      <Package size={11} style={{ color: isOutOfStock ? "#ef4444" : stockSlots <= 3 ? "#fbbf24" : "#22c55e" }} />
+                      <span
+                        style={{
+                          fontSize: 11,
+                          fontWeight: 700,
+                          color: isOutOfStock ? "#ef4444" : stockSlots <= 3 ? "#fbbf24" : "#22c55e",
+                        }}
+                      >
+                        {isOutOfStock ? "Habis" : `${stockSlots} slot`}
+                      </span>
+                    </div>
                   </div>
 
                   {/* Name */}
@@ -415,6 +476,7 @@ export default function MarketplacePage() {
 
                   {/* CTA */}
                   <button
+                    disabled={isOutOfStock}
                     style={{
                       width: "100%",
                       padding: "12px 0",
@@ -422,21 +484,26 @@ export default function MarketplacePage() {
                       border: "none",
                       fontWeight: 700,
                       fontSize: 14,
-                      cursor: "pointer",
+                      cursor: isOutOfStock ? "not-allowed" : "pointer",
                       display: "flex",
                       alignItems: "center",
                       justifyContent: "center",
                       gap: 8,
                       transition: "all 0.2s",
-                      background: product.popular
+                      background: isOutOfStock
+                        ? "rgba(255,255,255,0.03)"
+                        : product.popular
                         ? "linear-gradient(135deg, #6366f1, #8b5cf6)"
                         : "rgba(255,255,255,0.06)",
-                      color: product.popular ? "white" : "rgba(255,255,255,0.7)",
-                      boxShadow: product.popular ? "0 4px 20px rgba(99,102,241,0.3)" : "none",
+                      color: isOutOfStock ? "rgba(255,255,255,0.3)" : product.popular ? "white" : "rgba(255,255,255,0.7)",
+                      boxShadow: product.popular && !isOutOfStock ? "0 4px 20px rgba(99,102,241,0.3)" : "none",
                     }}
                   >
-                    <ShoppingCart size={15} />
-                    Beli Sekarang
+                    {isOutOfStock ? (
+                      <>Stok Habis</>  
+                    ) : (
+                      <><ShoppingCart size={15} /> Beli Sekarang</>
+                    )}
                   </button>
                 </div>
               );
