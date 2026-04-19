@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/db";
 import { NextRequest, NextResponse } from "next/server";
 import { parseDuration, calcWarrantyExpiry } from "@/lib/duration";
-import { parseProductType } from "@/lib/product";
+import { parseProductType, resolveProductSku } from "@/lib/product";
 
 // FIX #6: Gunakan shared parseProductType dari lib/product.ts (hapus definisi lokal)
 
@@ -44,7 +44,9 @@ export async function POST(req: NextRequest) {
     const productTitle = firstItem.title || "CapCut Pro";
     const price = messageData.totals?.grandTotal || firstItem.price || 0;
     const durationDays = parseDuration(productTitle);
-    const productType = parseProductType(productTitle);
+    
+    // Resolve exact SKU via DB
+    const { sku: targetSku, baseType: productType } = await resolveProductSku(productTitle);
     const questions = firstItem.questions || "";
 
     // Data affiliate dari payload Lynk.id
@@ -123,7 +125,7 @@ export async function POST(req: NextRequest) {
       // Cari kandidat akun yang matching durasi + tipe
       let candidateAccounts = await tx.stockAccount.findMany({
         where: {
-          productType,
+          productType: targetSku,
           status: "available",
           durationDays,
         },
@@ -133,7 +135,7 @@ export async function POST(req: NextRequest) {
       // Fallback 1: tipe sama, tanpa filter durasi
       if (candidateAccounts.length === 0) {
         candidateAccounts = await tx.stockAccount.findMany({
-          where: { productType, status: "available" },
+          where: { productType: targetSku, status: "available" },
           orderBy: [{ usedSlots: "asc" }, { createdAt: "asc" }],
         });
       }

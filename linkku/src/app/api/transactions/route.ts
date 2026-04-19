@@ -2,7 +2,7 @@ import { prisma } from "@/lib/db";
 import { NextRequest, NextResponse } from "next/server";
 import { requirePermission } from "@/lib/auth";
 import { parseDuration, calcWarrantyExpiry } from "@/lib/duration";
-import { parseProductType } from "@/lib/product";
+import { parseProductType, resolveProductSku } from "@/lib/product";
 
 export const dynamic = 'force-dynamic';
 
@@ -102,7 +102,7 @@ export async function POST(req: NextRequest) {
     const durationDays = durationFromName > 0 ? durationFromName : rawDuration;
 
     // FIX #4: Deteksi productType dari nama produk
-    const detectedProductType = parseProductType(productName || "");
+    const { sku: detectedProductType } = await resolveProductSku(productName || "");
 
     if (!email || !name || !whatsapp) {
       return NextResponse.json({ error: "Email, nama, dan WhatsApp wajib diisi" }, { status: 400 });

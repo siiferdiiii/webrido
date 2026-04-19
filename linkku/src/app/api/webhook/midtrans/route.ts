@@ -6,6 +6,7 @@ import {
   isPaymentFailed,
 } from "@/lib/midtrans";
 import { sendTemplatedWhatsApp } from "@/lib/mpwa";
+import { resolveProductSku } from "@/lib/product";
 
 // POST /api/webhook/midtrans — Handle Midtrans payment notifications
 export async function POST(req: NextRequest) {
@@ -58,24 +59,7 @@ export async function POST(req: NextRequest) {
       });
 
       // Fetch products to map productName -> SKU
-      let targetSku = null;
-      try {
-        const setting = await prisma.appSetting.findUnique({ where: { key: "products" } });
-        if (setting && setting.value) {
-          const products = JSON.parse(setting.value);
-          const matched = products.find((p: any) => p.name.toLowerCase() === (transaction.productName || "").toLowerCase());
-          if (matched) targetSku = matched.id;
-        }
-      } catch (e) {
-        console.error("[Midtrans Webhook] Error fetching products for SKU mapping:", e);
-      }
-
-      // If SKU is not resolved, fallback to the old fuzzy logic for backward compatibility
-      if (!targetSku) {
-        const productName = (transaction.productName || "").toLowerCase();
-        const isDesktop = productName.includes("desktop") || productName.includes("pc") || productName.includes("mac");
-        targetSku = isDesktop ? "desktop" : "mobile";
-      }
+      const { sku: targetSku } = await resolveProductSku(transaction.productName || "");
 
       // Auto-assign stock account strictly matching product SKU/Type
       try {

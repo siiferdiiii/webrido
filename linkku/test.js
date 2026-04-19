@@ -1,0 +1,1 @@
+﻿const { PrismaClient } = require('@prisma/client'); const prisma = new PrismaClient(); async function main() { console.log(await prisma.stockAccount.findMany({take:5, orderBy:{createdAt:'desc'}})); console.log(await prisma.appSetting.findUnique({where:{key:'products'}})); } main();

@@ -24,8 +24,25 @@ export async function GET(req: NextRequest) {
     }
 
     if (status && status !== "all") where.status = status;
-    if (productType && productType !== "all") where.productType = productType;
-
+    if (productType && productType !== "all") {
+      if (productType === "mobile" || productType === "desktop") {
+        try {
+          const setting = await prisma.appSetting.findUnique({ where: { key: "products" } });
+          const skus = [productType];
+          if (setting && setting.value) {
+            const products = JSON.parse(setting.value);
+            products.forEach((p: any) => {
+              if (p.type === productType) skus.push(p.id);
+            });
+          }
+          where.productType = { in: skus };
+        } catch (e) {
+          where.productType = productType;
+        }
+      } else {
+        where.productType = productType;
+      }
+    }
     // ── Fetch semua data yang diperlukan ─────────────────────────────────────
     const [accounts, total, allRawStats] = await Promise.all([
       prisma.stockAccount.findMany({
