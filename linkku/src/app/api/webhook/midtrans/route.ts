@@ -47,7 +47,7 @@ export async function POST(req: NextRequest) {
 
     // 3. Update transaction status based on payment result
     if (isPaymentSuccess(transaction_status, fraud_status)) {
-      // Payment successful
+      // Payment successful — update status
       await prisma.transaction.update({
         where: { id: transaction.id },
         data: {
@@ -56,63 +56,71 @@ export async function POST(req: NextRequest) {
         },
       });
 
-      // Auto-assign stock account if available
+      // Detect product type from productName
+      const productName = (transaction.productName || "").toLowerCase();
+      const isDesktop = productName.includes("desktop") || productName.includes("pc") || productName.includes("mac");
+      const productType = isDesktop ? "desktop" : "mobile";
+
+      // Auto-assign stock account matching product type
       try {
         const availableStock = await prisma.stockAccount.findFirst({
           where: {
             status: "available",
+            productType,
           },
           orderBy: { createdAt: "asc" },
         });
 
-        if (availableStock) {
-          // Calculate warranty expiry
-          const warrantyDays = availableStock.durationDays || 30;
+        // Fallback: if no matching type, try any available
+        const stock = availableStock || await prisma.stockAccount.findFirst({
+          where: { status: "available" },
+          orderBy: { createdAt: "asc" },
+        });
+
+        if (stock) {
+          const warrantyDays = stock.durationDays || 30;
           const warrantyExpiredAt = new Date();
           warrantyExpiredAt.setDate(warrantyExpiredAt.getDate() + warrantyDays);
+
+          const newUsedSlots = (stock.usedSlots || 0) + 1;
+          const maxSlots = stock.maxSlots || 3;
 
           await prisma.$transaction([
             prisma.transaction.update({
               where: { id: transaction.id },
               data: {
-                stockAccountId: availableStock.id,
+                stockAccountId: stock.id,
                 warrantyExpiredAt,
               },
             }),
             prisma.stockAccount.update({
-              where: { id: availableStock.id },
+              where: { id: stock.id },
               data: {
                 usedSlots: { increment: 1 },
-                status:
-                  (availableStock.usedSlots || 0) + 1 >= (availableStock.maxSlots || 3)
-                    ? "sold"
-                    : "in_use",
+                status: newUsedSlots >= maxSlots ? "sold" : "in_use",
               },
             }),
           ]);
 
-          console.log(`[Midtrans Webhook] Auto-assigned stock ${availableStock.accountEmail} to ${order_id}`);
+          console.log(`[Midtrans Webhook] Auto-assigned ${stock.accountEmail} (${stock.productType}) to ${order_id}`);
+        } else {
+          console.log(`[Midtrans Webhook] No available stock for ${order_id} — admin needs to assign manually`);
         }
       } catch (stockErr) {
         console.error("[Midtrans Webhook] Auto-assign stock failed:", stockErr);
-        // Non-blocking — admin can manually assign later
       }
 
       console.log(`[Midtrans Webhook] Payment SUCCESS for ${order_id}`);
     } else if (isPaymentFailed(transaction_status)) {
-      // Payment failed/cancelled
       await prisma.transaction.update({
         where: { id: transaction.id },
         data: { status: "failed" },
       });
-
       console.log(`[Midtrans Webhook] Payment FAILED for ${order_id}`);
     } else {
-      // Pending or other status
       console.log(`[Midtrans Webhook] Status ${transaction_status} for ${order_id} — no action`);
     }
 
-    // Midtrans expects 200 OK
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error("[Midtrans Webhook] Error:", error);

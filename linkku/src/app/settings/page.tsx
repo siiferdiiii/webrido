@@ -24,6 +24,9 @@ import {
   Trash2,
   Pencil,
   X,
+  ShoppingBag,
+  Smartphone,
+  Monitor,
 } from "lucide-react";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -42,6 +45,17 @@ interface TagItem {
   name: string;
   color: string;
   _count?: { customers: number };
+}
+
+interface ProductItem {
+  id: string;
+  name: string;
+  description: string;
+  price: number;
+  duration: number;
+  type: string;
+  features: string[];
+  popular: boolean;
 }
 
 const PRESET_COLORS = [
@@ -172,6 +186,16 @@ export default function SettingsPage() {
   // Local permission edits per admin (before save)
   const [localPerms, setLocalPerms] = useState<Record<string, Record<string, boolean>>>({});
 
+  // ── Product management state ──────────────────────────────────────────────
+  const [products, setProducts] = useState<ProductItem[]>([]);
+  const [loadingProducts, setLoadingProducts] = useState(false);
+  const [editProductIdx, setEditProductIdx] = useState<number | null>(null);
+  const [productForm, setProductForm] = useState<ProductItem>({
+    id: "", name: "", description: "", price: 0, duration: 30, type: "mobile", features: [], popular: false,
+  });
+  const [featureInput, setFeatureInput] = useState("");
+  const [savingProducts, setSavingProducts] = useState(false);
+
   const fetchSettings = useCallback(async () => {
     setLoading(true);
     try {
@@ -201,6 +225,19 @@ export default function SettingsPage() {
 
   useEffect(() => { fetchSettings(); }, [fetchSettings]);
   useEffect(() => { fetchTags(); }, [fetchTags]);
+
+  // ── Product fetch ─────────────────────────────────────────────────────────
+  const fetchProducts = useCallback(async () => {
+    setLoadingProducts(true);
+    try {
+      const res = await fetch("/api/products");
+      const json = await res.json();
+      setProducts(json.products || []);
+    } catch (e) { console.error(e); }
+    setLoadingProducts(false);
+  }, []);
+
+  useEffect(() => { fetchProducts(); }, [fetchProducts]);
 
   const isDirty = JSON.stringify(settings) !== JSON.stringify(original);
 
@@ -361,6 +398,68 @@ export default function SettingsPage() {
 
   function handleReset() {
     setSettings({ ...original });
+  }
+
+  // ── Product CRUD ──────────────────────────────────────────────────────────
+  function openAddProduct() {
+    setEditProductIdx(null);
+    setProductForm({
+      id: `product-${Date.now()}`, name: "", description: "", price: 0,
+      duration: 30, type: "mobile", features: [], popular: false,
+    });
+    setFeatureInput("");
+  }
+
+  function openEditProduct(idx: number) {
+    setEditProductIdx(idx);
+    setProductForm({ ...products[idx] });
+    setFeatureInput("");
+  }
+
+  function addFeature() {
+    if (!featureInput.trim()) return;
+    setProductForm(p => ({ ...p, features: [...p.features, featureInput.trim()] }));
+    setFeatureInput("");
+  }
+
+  function removeFeature(i: number) {
+    setProductForm(p => ({ ...p, features: p.features.filter((_, idx) => idx !== i) }));
+  }
+
+  async function handleSaveProduct() {
+    if (!productForm.name || !productForm.price) return;
+    setSavingProducts(true);
+    const updated = [...products];
+    if (editProductIdx !== null) {
+      updated[editProductIdx] = productForm;
+    } else {
+      updated.push(productForm);
+    }
+    try {
+      await fetch("/api/settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ products: JSON.stringify(updated) }),
+      });
+      setProducts(updated);
+      setEditProductIdx(null);
+      setProductForm({ id: "", name: "", description: "", price: 0, duration: 30, type: "mobile", features: [], popular: false });
+    } catch (e) { console.error(e); }
+    setSavingProducts(false);
+  }
+
+  async function handleDeleteProduct(idx: number) {
+    const updated = products.filter((_, i) => i !== idx);
+    setSavingProducts(true);
+    try {
+      await fetch("/api/settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ products: JSON.stringify(updated) }),
+      });
+      setProducts(updated);
+    } catch (e) { console.error(e); }
+    setSavingProducts(false);
   }
 
   const currentTab = TEMPLATE_TABS.find(t => t.key === activeTab);
@@ -899,6 +998,146 @@ export default function SettingsPage() {
                   )}
                 </div>
               )}
+
+              {/* ─── Product Catalog Management ─────────────────────────────── */}
+              <div className="glass-card p-5 space-y-4">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: "rgba(34,197,94,0.15)" }}>
+                    <ShoppingBag size={16} className="text-emerald-400" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-sm font-semibold text-white">Katalog Produk</p>
+                    <p className="text-[11px] text-[var(--text-muted)]">Produk yang tampil di marketplace</p>
+                  </div>
+                  <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ background: "rgba(34,197,94,0.15)", color: "#22c55e" }}>{products.length}</span>
+                </div>
+
+                {loadingProducts ? (
+                  <div className="flex justify-center py-3"><Loader2 size={16} className="animate-spin text-emerald-400" /></div>
+                ) : (
+                  <div className="space-y-2 max-h-80 overflow-y-auto pr-0.5">
+                    {products.map((product, idx) => (
+                      <div
+                        key={product.id}
+                        className="flex items-center gap-2.5 px-2.5 py-2 rounded-xl group transition-colors hover:bg-white/[0.03]"
+                        style={{ border: "1px solid rgba(255,255,255,0.05)" }}
+                      >
+                        <div className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: product.type === "desktop" ? "rgba(59,130,246,0.15)" : "rgba(34,197,94,0.15)" }}>
+                          {product.type === "desktop" ? <Monitor size={13} style={{ color: "#3b82f6" }} /> : <Smartphone size={13} style={{ color: "#22c55e" }} />}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-white truncate">{product.name}</p>
+                          <p className="text-[10px] text-[var(--text-muted)]">
+                            Rp {product.price.toLocaleString("id-ID")} · {product.duration} hari
+                            {product.popular && <span className="ml-1 text-amber-400">⭐</span>}
+                          </p>
+                        </div>
+                        <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button onClick={() => openEditProduct(idx)} className="btn-icon" style={{ width: 26, height: 26 }} title="Edit">
+                            <Pencil size={12} />
+                          </button>
+                          <button onClick={() => handleDeleteProduct(idx)} className="btn-icon hover:text-rose-400 hover:bg-rose-500/10" style={{ width: 26, height: 26 }} title="Hapus">
+                            <Trash2 size={12} />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                    {products.length === 0 && (
+                      <p className="text-xs text-[var(--text-muted)] text-center py-3">Belum ada produk. Tambah di bawah.</p>
+                    )}
+                  </div>
+                )}
+
+                {/* Add Product Button */}
+                <button
+                  onClick={openAddProduct}
+                  className="w-full flex items-center justify-center gap-2 py-2 rounded-xl text-xs font-semibold transition-all"
+                  style={{ background: "rgba(34,197,94,0.1)", border: "1px solid rgba(34,197,94,0.25)", color: "#22c55e" }}
+                >
+                  <Plus size={13} /> Tambah Produk
+                </button>
+
+                {/* Product Edit Form (inline) */}
+                {(editProductIdx !== null || productForm.id.startsWith("product-")) && productForm.id && (
+                  <div className="p-4 rounded-xl space-y-3" style={{ background: "rgba(34,197,94,0.05)", border: "1px solid rgba(34,197,94,0.15)" }}>
+                    <p className="text-xs font-semibold text-emerald-400 uppercase tracking-wider">
+                      {editProductIdx !== null ? "Edit Produk" : "Produk Baru"}
+                    </p>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="form-label text-[10px]">Nama</label>
+                        <input type="text" className="form-input text-sm" value={productForm.name} onChange={e => setProductForm(p => ({ ...p, name: e.target.value }))} placeholder="CapCut Pro Mobile" />
+                      </div>
+                      <div>
+                        <label className="form-label text-[10px]">Harga (Rp)</label>
+                        <input type="number" className="form-input text-sm" value={productForm.price} onChange={e => setProductForm(p => ({ ...p, price: parseInt(e.target.value) || 0 }))} />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="form-label text-[10px]">Tipe</label>
+                        <select className="form-input text-sm" value={productForm.type} onChange={e => setProductForm(p => ({ ...p, type: e.target.value }))}>
+                          <option value="mobile">Mobile</option>
+                          <option value="desktop">Desktop</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="form-label text-[10px]">Durasi (Hari)</label>
+                        <input type="number" className="form-input text-sm" value={productForm.duration} onChange={e => setProductForm(p => ({ ...p, duration: parseInt(e.target.value) || 30 }))} />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="form-label text-[10px]">Deskripsi</label>
+                      <input type="text" className="form-input text-sm" value={productForm.description} onChange={e => setProductForm(p => ({ ...p, description: e.target.value }))} placeholder="Akses premium selama 30 hari" />
+                    </div>
+
+                    {/* Features */}
+                    <div>
+                      <label className="form-label text-[10px]">Fitur</label>
+                      <div className="flex flex-wrap gap-1 mb-2">
+                        {productForm.features.map((f, i) => (
+                          <span key={i} className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full" style={{ background: "rgba(34,197,94,0.15)", color: "#22c55e", border: "1px solid rgba(34,197,94,0.3)" }}>
+                            {f}
+                            <button onClick={() => removeFeature(i)} style={{ cursor: "pointer" }}><X size={10} /></button>
+                          </span>
+                        ))}
+                      </div>
+                      <div className="flex gap-2">
+                        <input type="text" className="form-input text-sm flex-1" value={featureInput} onChange={e => setFeatureInput(e.target.value)} placeholder="Tambah fitur..." onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); addFeature(); } }} />
+                        <button onClick={addFeature} className="btn-icon" style={{ width: 32, height: 32 }}><Plus size={14} /></button>
+                      </div>
+                    </div>
+
+                    {/* Popular toggle */}
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input type="checkbox" checked={productForm.popular} onChange={e => setProductForm(p => ({ ...p, popular: e.target.checked }))} style={{ accentColor: "#22c55e" }} />
+                      <span className="text-xs text-[var(--text-secondary)]">Tandai sebagai Best Seller</span>
+                    </label>
+
+                    <div className="flex gap-2">
+                      <button
+                        onClick={handleSaveProduct}
+                        disabled={savingProducts || !productForm.name || !productForm.price}
+                        className="flex-1 flex items-center justify-center gap-1.5 h-8 rounded-lg text-xs font-semibold"
+                        style={{ background: "rgba(34,197,94,0.2)", border: "1px solid rgba(34,197,94,0.4)", color: "#22c55e" }}
+                      >
+                        {savingProducts ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />}
+                        {editProductIdx !== null ? "Update" : "Simpan"}
+                      </button>
+                      <button
+                        onClick={() => { setEditProductIdx(null); setProductForm({ id: "", name: "", description: "", price: 0, duration: 30, type: "mobile", features: [], popular: false }); }}
+                        className="flex items-center justify-center h-8 px-3 rounded-lg"
+                        style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", color: "var(--text-muted)" }}
+                      >
+                        <X size={12} /> Batal
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* ─── Right: Template Editor ───────────────────────────────────── */}
