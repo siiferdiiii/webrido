@@ -108,13 +108,18 @@ export async function GET(req: NextRequest) {
       sold: mobileStatusCounts.sold + desktopStatusCounts.sold,
     };
 
-    // ── Sisa slot (hanya dari akun yang benar-benar masih ada kapasitas) ─────
-    const remainingSlotsMobile = allMobileRaw.reduce((sum, acc) => {
-      return sum + Math.max(0, (acc.maxSlots ?? 3) - (acc.usedSlots ?? 0));
-    }, 0);
-    const remainingSlotsDesktop = allDesktopRaw.reduce((sum, acc) => {
-      return sum + Math.max(0, (acc.maxSlots ?? 2) - (acc.usedSlots ?? 0));
-    }, 0);
+    // ── Sisa slot (hanya dari akun yang status-nya available/in_use, bukan sold/full/banned/expired) ─
+    const assignableStatuses = ["available", "in_use"];
+    const remainingSlotsMobile = allMobileRaw
+      .filter(acc => assignableStatuses.includes(acc.status ?? ""))
+      .reduce((sum, acc) => {
+        return sum + Math.max(0, (acc.maxSlots ?? 3) - (acc.usedSlots ?? 0));
+      }, 0);
+    const remainingSlotsDesktop = allDesktopRaw
+      .filter(acc => assignableStatuses.includes(acc.status ?? ""))
+      .reduce((sum, acc) => {
+        return sum + Math.max(0, (acc.maxSlots ?? 2) - (acc.usedSlots ?? 0));
+      }, 0);
 
     return NextResponse.json({
       accounts, total, page, limit,
