@@ -126,7 +126,7 @@ export async function POST(req: NextRequest) {
       let candidateAccounts = await tx.stockAccount.findMany({
         where: {
           productType: targetSku,
-          status: "available",
+          status: { in: ["available", "in_use"] },
           durationDays,
         },
         orderBy: [{ usedSlots: "asc" }, { createdAt: "asc" }],
@@ -135,7 +135,7 @@ export async function POST(req: NextRequest) {
       // Fallback 1: tipe sama, tanpa filter durasi
       if (candidateAccounts.length === 0) {
         candidateAccounts = await tx.stockAccount.findMany({
-          where: { productType: targetSku, status: "available" },
+          where: { productType: targetSku, status: { in: ["available", "in_use"] } },
           orderBy: [{ usedSlots: "asc" }, { createdAt: "asc" }],
         });
       }
@@ -143,7 +143,7 @@ export async function POST(req: NextRequest) {
       // Fallback 2: tipe apapun
       if (candidateAccounts.length === 0) {
         candidateAccounts = await tx.stockAccount.findMany({
-          where: { status: "available" },
+          where: { status: { in: ["available", "in_use"] } },
           orderBy: [{ usedSlots: "asc" }, { createdAt: "asc" }],
         });
       }
