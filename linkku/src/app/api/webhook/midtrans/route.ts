@@ -107,14 +107,17 @@ export async function POST(req: NextRequest) {
 
 
       // Fetch products to map productName -> SKU
-      const { sku: targetSku } = await resolveProductSku(transaction.productName || "");
+      const { sku: targetSku, baseType } = await resolveProductSku(transaction.productName || "");
 
       // Auto-assign stock account strictly matching product SKU/Type
       try {
         const stock = await prisma.stockAccount.findFirst({
           where: {
             status: "available",
-            productType: targetSku,
+            OR: [
+              { productType: { equals: targetSku, mode: "insensitive" } },
+              { productType: { equals: baseType, mode: "insensitive" } },
+            ],
           },
           orderBy: { createdAt: "asc" },
         });
